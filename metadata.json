@@ -1,0 +1,9 @@
+{
+  "name": "Bad Bingo",
+  "description": "A cyberpunk social betting RPG where friends judge each other's habits. Features high-stakes social economy and AI-generated scenarios.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

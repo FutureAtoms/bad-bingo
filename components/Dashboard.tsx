@@ -1,5 +1,5 @@
 import React from 'react';
-import { UserProfile, Friend, RelationshipLevel, ActiveBet } from '../types';
+import { UserProfile, Friend, RelationshipLevel, ActiveBet, AppView } from '../types';
 
 interface DashboardProps {
   user: UserProfile;
@@ -24,18 +24,29 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="h-full bg-bingo-black text-gray-200 p-4 overflow-y-auto">
-      {/* Tuna Stash Header */}
-      <div className="mb-6 p-6 bg-gradient-to-r from-bingo-dark to-black border border-acid-green rounded-xl relative overflow-hidden shadow-[0_0_15px_rgba(204,255,0,0.1)]">
-        <div className="absolute top-0 right-0 p-2 opacity-20 text-6xl">
+      {/* Tuna Stash Header (Clickable Profile) */}
+      <div 
+        onClick={() => onNavigate(AppView.PROFILE)}
+        className="mb-6 p-6 bg-gradient-to-r from-bingo-dark to-black border border-acid-green rounded-xl relative overflow-hidden shadow-[0_0_15px_rgba(204,255,0,0.1)] cursor-pointer active:scale-[0.98] transition-transform group"
+      >
+        <div className="absolute top-0 right-0 p-2 opacity-20 text-6xl group-hover:opacity-30 transition-opacity">
           <i className="fas fa-wallet"></i>
         </div>
-        <h2 className="text-sm text-gray-400 uppercase tracking-widest">Tuna Stash (Balance)</h2>
-        <div className="text-4xl font-bold text-white mt-1 flex items-baseline gap-2">
-          {user.coins} <span className="text-xl text-acid-green">😼</span>
+        <div className="flex justify-between items-start">
+            <div>
+                <h2 className="text-sm text-gray-400 uppercase tracking-widest">Tuna Stash (Balance)</h2>
+                <div className="text-4xl font-bold text-white mt-1 flex items-baseline gap-2">
+                {user.coins} <span className="text-xl text-acid-green">😼</span>
+                </div>
+            </div>
+            <div className="bg-gray-800/50 p-1 rounded-full border border-white/10">
+                 <img src={user.avatarUrl} className="w-8 h-8 rounded-full" />
+            </div>
         </div>
         <p className="text-xs text-hot-pink mt-2">Next Drop: Monday</p>
-        <div className="mt-4 text-xs font-mono text-gray-500 border-t border-gray-800 pt-2">
-          RISK PROFILE: {user.name} | {user.riskProfile.substring(0, 30)}...
+        <div className="mt-4 text-xs font-mono text-gray-500 border-t border-gray-800 pt-2 flex justify-between items-center">
+          <span className="truncate max-w-[200px]">ID: {user.name} | {user.riskProfile}</span>
+          <i className="fas fa-chevron-right text-[10px] opacity-50"></i>
         </div>
       </div>
 
@@ -57,8 +68,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                                  </div>
                              </div>
                              <div className="flex gap-2">
-                                 <button onClick={() => onRejectFriend(req)} className="w-8 h-8 flex items-center justify-center rounded bg-gray-800 text-gray-500 hover:text-alert-red transition-colors"><i className="fas fa-times"></i></button>
-                                 <button onClick={() => onAcceptFriend(req)} className="w-8 h-8 flex items-center justify-center rounded bg-acid-green text-black hover:bg-white transition-colors"><i className="fas fa-check"></i></button>
+                                 <button onClick={(e) => { e.stopPropagation(); onRejectFriend(req); }} className="w-8 h-8 flex items-center justify-center rounded bg-gray-800 text-gray-500 hover:text-alert-red transition-colors"><i className="fas fa-times"></i></button>
+                                 <button onClick={(e) => { e.stopPropagation(); onAcceptFriend(req); }} className="w-8 h-8 flex items-center justify-center rounded bg-acid-green text-black hover:bg-white transition-colors"><i className="fas fa-check"></i></button>
                              </div>
                          </div>
                      ))}
@@ -144,35 +155,41 @@ const Dashboard: React.FC<DashboardProps> = ({
         )}
 
         {activeFriends.map(friend => (
-            <div key={friend.id} className="bg-bingo-dark p-3 rounded-lg border border-gray-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <img src={friend.avatarUrl} alt={friend.name} className="w-10 h-10 rounded-full border border-gray-600 grayscale hover:grayscale-0 transition-all" />
-                  <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-black ${friend.status === 'online' ? 'bg-acid-green' : 'bg-gray-500'}`}></div>
+            <div key={friend.id} className="bg-bingo-dark p-3 rounded-lg border border-gray-800 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="relative">
+                    <img src={friend.avatarUrl} alt={friend.name} className="w-10 h-10 rounded-full border border-gray-600 grayscale hover:grayscale-0 transition-all" />
+                    <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-black ${friend.status === 'online' ? 'bg-acid-green' : 'bg-gray-500'}`}></div>
+                    </div>
+                    <div>
+                    <div className="font-bold text-sm">{friend.name}</div>
+                    <div className="text-[10px] text-gray-500 uppercase flex items-center gap-1">
+                        {friend.relationshipLevel === 1 && <span className="text-blue-400">Civilian</span>}
+                        {friend.relationshipLevel === 2 && <span className="text-orange-400">Roast</span>}
+                        {friend.relationshipLevel === 3 && <span className="text-alert-red animate-pulse">Nuclear</span>}
+                    </div>
+                    </div>
                 </div>
-                <div>
-                  <div className="font-bold text-sm">{friend.name}</div>
-                  <div className="text-[10px] text-gray-500 uppercase flex items-center gap-1">
-                    {friend.relationshipLevel === 1 && <span className="text-blue-400">Casual</span>}
-                    {friend.relationshipLevel === 2 && <span className="text-orange-400">Roast</span>}
-                    {friend.relationshipLevel === 3 && <span className="text-alert-red animate-pulse">Nuclear</span>}
-                  </div>
+                
+                <div className="flex gap-2">
+                    <button 
+                    onClick={() => onSelectFriend(friend)}
+                    className="bg-gray-800 hover:bg-gray-700 text-cyan-glitch px-3 py-1 rounded text-xs font-bold border border-cyan-glitch border-opacity-30"
+                    >
+                    CLAW-OFF
+                    </button>
+                    <button 
+                    onClick={() => onSteal(friend)}
+                    className="bg-gray-800 hover:bg-red-900/50 text-alert-red px-3 py-1 rounded text-xs font-bold border border-alert-red border-opacity-30"
+                    >
+                    STEAL
+                    </button>
                 </div>
               </div>
-              
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => onSelectFriend(friend)}
-                  className="bg-gray-800 hover:bg-gray-700 text-cyan-glitch px-3 py-1 rounded text-xs font-bold border border-cyan-glitch border-opacity-30"
-                >
-                  CLAW-OFF
-                </button>
-                <button 
-                  onClick={() => onSteal(friend)}
-                  className="bg-gray-800 hover:bg-red-900/50 text-alert-red px-3 py-1 rounded text-xs font-bold border border-alert-red border-opacity-30"
-                >
-                  STEAL
-                </button>
+              {/* Vibe Description */}
+              <div className="text-[10px] text-gray-500 italic border-t border-gray-800 pt-2 mt-1">
+                  "{friend.relationshipDescription || 'Just a random stray.'}"
               </div>
             </div>
         ))}

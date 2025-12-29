@@ -5,13 +5,13 @@ import Clash from './components/Clash';
 import StealMinigame from './components/StealMinigame';
 import CameraProof from './components/CameraProof';
 import AddFriend from './components/AddFriend';
-import { AppView, UserProfile, Friend, ActiveBet, RelationshipLevel } from './types';
+import Profile from './components/Profile';
+import { AppView, UserProfile, Friend, ActiveBet, RelationshipLevel, InGameNotification } from './types';
 
 // Mock initial friends data with accepted status
 const INITIAL_FRIENDS: Friend[] = [
-  { id: 'f1', name: 'CyberMom', relationshipLevel: RelationshipLevel.CIVILIAN, status: 'offline', friendshipStatus: 'accepted', coins: 500, avatarUrl: 'https://picsum.photos/seed/mom/100' },
-  { id: 'f2', name: 'GlitchBoy_99', relationshipLevel: RelationshipLevel.ROAST, status: 'online', friendshipStatus: 'accepted', coins: 50, avatarUrl: 'https://picsum.photos/seed/boy/100' },
-  { id: 'f3', name: 'Ex_Machina', relationshipLevel: RelationshipLevel.NUCLEAR, status: 'offline', friendshipStatus: 'accepted', coins: 1200, avatarUrl: 'https://picsum.photos/seed/ex/100' },
+  { id: 'f1', name: 'CyberMom', relationshipLevel: RelationshipLevel.CIVILIAN, relationshipDescription: "She feeds you.", status: 'offline', friendshipStatus: 'accepted', coins: 500, avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=mom' },
+  { id: 'f2', name: 'GlitchBoy_99', relationshipLevel: RelationshipLevel.ROAST, relationshipDescription: "Gaming buddy who owes you money.", status: 'online', friendshipStatus: 'accepted', coins: 50, avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=boy' },
 ];
 
 const App: React.FC = () => {
@@ -22,52 +22,55 @@ const App: React.FC = () => {
   const [stealTarget, setStealTarget] = useState<Friend | null>(null);
   const [activeBets, setActiveBets] = useState<ActiveBet[]>([]);
   const [currentBetForProof, setCurrentBetForProof] = useState<ActiveBet | null>(null);
+  const [notifications, setNotifications] = useState<InGameNotification[]>([]);
 
-  // Load persistence and simulate events
+  // 1. Initialization Effect - Runs ONLY ONCE on mount
   useEffect(() => {
     const saved = localStorage.getItem('bingo_user');
     if (saved) {
       setUser(JSON.parse(saved));
       setView(AppView.DASHBOARD);
     }
+    
     const savedBets = localStorage.getItem('bingo_bets');
     if (savedBets) {
         setActiveBets(JSON.parse(savedBets));
     }
+
     const savedFriends = localStorage.getItem('bingo_friends');
     if (savedFriends) {
         setFriends(JSON.parse(savedFriends));
-    } else {
-        // DEMO: Simulate incoming request after 5s if no saved friends
-        setTimeout(() => {
-            const incomingRequest: Friend = {
-                id: 'incoming-1',
-                name: 'Anonymous_V',
-                relationshipLevel: RelationshipLevel.ROAST,
-                status: 'online',
-                friendshipStatus: 'pending_received',
-                coins: 666,
-                avatarUrl: 'https://picsum.photos/seed/hacker/100'
-            };
-            setFriends(prev => {
-                // Avoid dupes
-                if (prev.find(f => f.id === incomingRequest.id)) return prev;
-                const updated = [incomingRequest, ...prev];
-                localStorage.setItem('bingo_friends', JSON.stringify(updated));
-                return updated;
-            });
-        }, 5000);
     }
   }, []);
 
-  const saveBets = (bets: ActiveBet[]) => {
-      setActiveBets(bets);
-      localStorage.setItem('bingo_bets', JSON.stringify(bets));
-  };
+  // 2. Game Loop Effect - Runs when user is active
+  useEffect(() => {
+    if (!user) return;
+    
+    // Simulate Game Loop / Notification System
+    const interval = setInterval(() => {
+        const roll = Math.random();
+        // 10% chance every 10s to get a notification in this demo
+        if (roll < 0.1) {
+            addNotification({
+                id: `notif-${Date.now()}`,
+                type: 'clash',
+                message: "⚔️ CLASH ALERT: GlitchBoy_99 challenged your claim!",
+                priority: 'high',
+                timestamp: Date.now()
+            });
+        }
+    }, 10000);
 
-  const saveFriends = (newFriends: Friend[]) => {
-      setFriends(newFriends);
-      localStorage.setItem('bingo_friends', JSON.stringify(newFriends));
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const addNotification = (n: InGameNotification) => {
+      setNotifications(prev => [n, ...prev]);
+      // Auto dismiss after 4s
+      setTimeout(() => {
+          setNotifications(prev => prev.filter(x => x.id !== n.id));
+      }, 4000);
   };
 
   const handleOnboardingComplete = (profile: UserProfile) => {
@@ -82,10 +85,7 @@ const App: React.FC = () => {
   };
 
   const handleSteal = (friend: Friend) => {
-    if (friend.status === 'online') {
-        alert("LIVE PVP ROBBERY NOT IMPLEMENTED IN DEMO (Requires WebSockets). Try an offline friend.");
-        return;
-    }
+    // In demo, allow offline steal logic mostly
     setStealTarget(friend);
     setView(AppView.STEAL);
   };
@@ -101,7 +101,16 @@ const App: React.FC = () => {
   };
 
   const handleBetCreated = (bet: ActiveBet) => {
-      saveBets([...activeBets, bet]);
+      const updated = [...activeBets, bet];
+      setActiveBets(updated);
+      localStorage.setItem('bingo_bets', JSON.stringify(updated));
+      addNotification({
+          id: `bet-${Date.now()}`,
+          type: 'system',
+          message: "💰 Bet Locked In. Good luck, stray.",
+          priority: 'normal',
+          timestamp: Date.now()
+      });
   };
 
   const handleOpenProof = (bet: ActiveBet) => {
@@ -114,45 +123,69 @@ const App: React.FC = () => {
           const updatedBets = activeBets.map(b => 
             b.id === currentBetForProof.id ? { ...b, status: 'reviewing' as const, proofUrl } : b
           );
-          saveBets(updatedBets);
+          setActiveBets(updatedBets);
+          localStorage.setItem('bingo_bets', JSON.stringify(updatedBets));
       }
       setCurrentBetForProof(null);
       setView(AppView.DASHBOARD);
+      addNotification({
+          id: `proof-${Date.now()}`,
+          type: 'proof',
+          message: "📸 Evidence Submitted to the Council.",
+          priority: 'normal',
+          timestamp: Date.now()
+      });
   };
 
   const handleAddFriend = (newFriend: Friend) => {
       const updated = [...friends, newFriend];
-      saveFriends(updated);
+      setFriends(updated);
+      localStorage.setItem('bingo_friends', JSON.stringify(updated));
       setView(AppView.DASHBOARD);
-
-      // DEMO: Simulate the other user accepting the request after 8 seconds
-      setTimeout(() => {
-        setFriends(prev => {
-           const mapped = prev.map(f => {
-               if (f.id === newFriend.id && f.friendshipStatus === 'pending_sent') {
-                   return { ...f, friendshipStatus: 'accepted' as const };
-               }
-               return f;
-           });
-           localStorage.setItem('bingo_friends', JSON.stringify(mapped));
-           // Optional: Trigger a notification state here if we had one
-           return mapped;
-        });
-      }, 8000);
+      
+      addNotification({
+          id: `friend-${Date.now()}`,
+          type: 'system',
+          message: `📡 Invite Sent to ${newFriend.name}`,
+          priority: 'normal',
+          timestamp: Date.now()
+      });
   };
 
   const handleAcceptFriend = (friend: Friend) => {
       const updated = friends.map(f => f.id === friend.id ? { ...f, friendshipStatus: 'accepted' as const } : f);
-      saveFriends(updated);
+      setFriends(updated);
   };
 
   const handleRejectFriend = (friend: Friend) => {
       const updated = friends.filter(f => f.id !== friend.id);
-      saveFriends(updated);
+      setFriends(updated);
   };
 
   return (
-    <div className="w-screen h-screen bg-bingo-black overflow-hidden font-sans select-none">
+    <div className="w-screen h-screen bg-bingo-black overflow-hidden font-sans select-none relative">
+      
+      {/* Notification Toast Layer */}
+      <div className="absolute top-0 left-0 right-0 z-[100] p-4 pointer-events-none flex flex-col items-center gap-2">
+          {notifications.map(n => (
+              <div key={n.id} className={`animate-in slide-in-from-top duration-300 w-full max-w-sm p-4 rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.5)] border-l-4 pointer-events-auto flex items-center gap-3 backdrop-blur-md ${
+                  n.priority === 'critical' ? 'bg-red-900/90 border-alert-red text-white' : 
+                  n.priority === 'high' ? 'bg-gray-900/90 border-hot-pink text-white' : 
+                  'bg-gray-900/90 border-acid-green text-gray-200'
+              }`}>
+                  <div className={`text-2xl ${n.priority === 'critical' ? 'animate-pulse' : ''}`}>
+                      {n.type === 'clash' && '⚔️'}
+                      {n.type === 'robbery' && '🚨'}
+                      {n.type === 'proof' && '📸'}
+                      {n.type === 'system' && '🤖'}
+                  </div>
+                  <div className="flex-1 text-sm font-bold font-mono leading-tight">
+                      {n.message}
+                  </div>
+              </div>
+          ))}
+      </div>
+
       {view === AppView.ONBOARDING && (
         <Onboarding onComplete={handleOnboardingComplete} />
       )}
@@ -202,6 +235,13 @@ const App: React.FC = () => {
             onClose={() => setView(AppView.DASHBOARD)}
             onSuccess={handleStealResult}
             onFail={() => setView(AppView.DASHBOARD)}
+        />
+      )}
+
+      {view === AppView.PROFILE && user && (
+        <Profile 
+            user={user}
+            onBack={() => setView(AppView.DASHBOARD)}
         />
       )}
     </div>

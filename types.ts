@@ -10,9 +10,9 @@ export enum AppView {
 }
 
 export enum RelationshipLevel {
-  CIVILIAN = 1, // Wholesome
-  ROAST = 2,    // Embarrassing
-  NUCLEAR = 3   // Deep/Vulgar
+  CIVILIAN = 1, // Safe / Mom / Boss
+  ROAST = 2,    // Friends / Besties
+  NUCLEAR = 3   // Partner / Ex / Deep History
 }
 
 export interface UserProfile {
@@ -50,6 +50,7 @@ export interface Friend {
   id: string;
   name: string;
   relationshipLevel: RelationshipLevel;
+  relationshipDescription: string; // AI Generated Vibe
   status: 'online' | 'offline';
   friendshipStatus: 'accepted' | 'pending_sent' | 'pending_received';
   coins: number;
@@ -59,4 +60,12 @@ export interface Friend {
 export interface ChatMessage {
   sender: 'ai' | 'user';
   text: string;
+}
+
+export interface InGameNotification {
+  id: string;
+  type: 'robbery' | 'clash' | 'proof' | 'system';
+  message: string;
+  priority: 'critical' | 'high' | 'normal';
+  timestamp: number;
 }

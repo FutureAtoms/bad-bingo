@@ -49,7 +49,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   useEffect(() => {
     // Check for existing session
+    let authResolved = false;
+
     const unsubscribe = onAuthStateChange((user) => {
+      authResolved = true;
       setCheckingAuth(false);
       if (user) {
         // Convert DB user to UserProfile format
@@ -128,9 +131,18 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       }
     );
 
+    // Fallback timeout - if auth check takes too long, show login form
+    const timeout = setTimeout(() => {
+      if (!authResolved) {
+        logDebug('[Login] Auth check timeout - showing login form');
+        setCheckingAuth(false);
+      }
+    }, 3000);
+
     return () => {
       unsubscribe();
       cleanupOAuth();
+      clearTimeout(timeout);
     };
   }, [onLoginSuccess]);
 

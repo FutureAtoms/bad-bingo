@@ -13,6 +13,10 @@
 - Added gitignore rules for secrets and build artifacts
 - Added GCP Secret Manager upload/fetch scripts for env + Firebase configs
 
+**Recent Fixes:** 2025-12-31
+- Added auth fallback navigation so the app exits login after a session is established
+- Refreshed friends list after sending requests to avoid needing an app restart
+
 ---
 
 ## 🔴 CRITICAL IMPLEMENTATION GAPS

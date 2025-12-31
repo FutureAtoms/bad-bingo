@@ -64,6 +64,15 @@ const mapDBUserToProfile = (dbUser: DBUser): UserProfile => ({
   loginStreak: dbUser.login_streak,
 });
 
+const resolvePostAuthView = (profile: UserProfile): AppView => {
+  if (!profile.riskProfile || profile.riskProfile === 'Unknown risk profile') {
+    return AppView.ONBOARDING;
+  }
+
+  const tutorialSeen = localStorage.getItem('bingo_tutorial_complete');
+  return tutorialSeen ? AppView.SWIPE_FEED : AppView.TUTORIAL;
+};
+
 const App: React.FC = () => {
   // Auth state
   const [authUserId, setAuthUserId] = useState<string | null>(null);
@@ -79,7 +88,7 @@ const App: React.FC = () => {
 
   // Use Supabase hooks for data
   const { user, loading: userLoading, updateUser } = useUser(authUserId);
-  const { friends, loading: friendsLoading, addFriend, acceptFriend, removeFriend, refetch: refetchFriends } = useFriends(authUserId);
+  const { friends, loading: friendsLoading, acceptFriend, removeFriend, refetch: refetchFriends } = useFriends(authUserId);
   const { bets: activeBets, loading: betsLoading, refetch: refetchBets } = useActiveBets(authUserId);
   const {
     notifications: persistentNotifications,
@@ -132,7 +141,7 @@ const App: React.FC = () => {
 
     logDebug('[App] Setting up auth state listener');
 
-    const unsubscribe = onAuthStateChange((dbUser) => {
+    const unsubscribe = onAuthStateChange(async (dbUser) => {
       logDebug('[App] Auth state changed:', {
         hasUser: !!dbUser,
         userId: dbUser?.id,
@@ -144,27 +153,40 @@ const App: React.FC = () => {
       if (dbUser) {
         setAuthUserId(dbUser.id);
         const profile = mapDBUserToProfile(dbUser);
-        logDebug('[App] Profile mapped, riskProfile:', profile.riskProfile);
-
-        // Check if user needs onboarding
-        if (!profile.riskProfile || profile.riskProfile === 'Unknown risk profile') {
-          logDebug('[App] Navigating to ONBOARDING');
-          setView(AppView.ONBOARDING);
-        } else {
-          // Check tutorial
-          const tutorialSeen = localStorage.getItem('bingo_tutorial_complete');
-          if (!tutorialSeen) {
-            logDebug('[App] Navigating to TUTORIAL');
-            setView(AppView.TUTORIAL);
-          } else {
-            logDebug('[App] Navigating to SWIPE_FEED');
-            setView(AppView.SWIPE_FEED);
-          }
-        }
+        const nextView = resolvePostAuthView(profile);
+        logDebug('[App] Profile mapped, routing to:', nextView);
+        setView(nextView);
       } else {
-        logDebug('[App] No user, showing SPLASH');
-        setAuthUserId(null);
-        setView(AppView.SPLASH);
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            const { data, error } = await supabase
+              .from('bb_users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+
+            if (data) {
+              const profile = mapDBUserToProfile(data as DBUser);
+              const nextView = resolvePostAuthView(profile);
+              logDebug('[App] Session found without profile payload, routing to:', nextView);
+              setAuthUserId(profile.id);
+              setView(nextView);
+            } else {
+              logDebug('[App] Session found but no profile, showing SPLASH', { error: error?.message });
+              setAuthUserId(null);
+              setView(AppView.SPLASH);
+            }
+          } else {
+            logDebug('[App] No user, showing SPLASH');
+            setAuthUserId(null);
+            setView(AppView.SPLASH);
+          }
+        } catch (err) {
+          logDebug('[App] Failed session check, showing SPLASH');
+          setAuthUserId(null);
+          setView(AppView.SPLASH);
+        }
       }
       setIsInitializing(false);
     });
@@ -376,22 +398,19 @@ const App: React.FC = () => {
     });
 
     setAuthUserId(profile.id);
-
-    if (!profile.riskProfile || profile.riskProfile === 'Unknown risk profile') {
-      logDebug('[App] handleLoginSuccess -> ONBOARDING');
-      setView(AppView.ONBOARDING);
-    } else {
-      // Check tutorial
-      const tutorialSeen = localStorage.getItem('bingo_tutorial_complete');
-      if (!tutorialSeen) {
-        logDebug('[App] handleLoginSuccess -> TUTORIAL');
-        setView(AppView.TUTORIAL);
-      } else {
-        logDebug('[App] handleLoginSuccess -> SWIPE_FEED');
-        setView(AppView.SWIPE_FEED);
-      }
-    }
+    const nextView = resolvePostAuthView(profile);
+    logDebug('[App] handleLoginSuccess ->', nextView);
+    setView(nextView);
   };
+
+  // Fallback: if auth is established but we're still on SPLASH, advance to the right screen
+  useEffect(() => {
+    if (!authUserId || !user || view !== AppView.SPLASH) return;
+
+    const nextView = resolvePostAuthView(user);
+    logDebug('[App] Auth fallback routing ->', nextView);
+    setView(nextView);
+  }, [authUserId, user, view]);
 
   const handleOnboardingComplete = async (profile: UserProfile) => {
     // Update profile in Supabase with extended profile data
@@ -536,7 +555,7 @@ const App: React.FC = () => {
   };
 
   const handleAddFriend = async (newFriend: Friend) => {
-    await addFriend(newFriend.id, newFriend.relationshipDescription, newFriend.relationshipLevel);
+    refetchFriends();
     setView(AppView.SWIPE_FEED);
 
     addToastNotification({

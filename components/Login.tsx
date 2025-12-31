@@ -1,15 +1,45 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { signInWithGoogle, setupOAuthListener, onAuthStateChange, signIn, signUp, resetOAuthCallback, getOrCreateProfileFromSession } from '../services/auth';
+import { signInWithGoogle, setupOAuthListener, onAuthStateChange, signIn, signUp, resetOAuthCallback, getOrCreateProfileFromSession, handleOAuthCallback } from '../services/auth';
 import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import type { UserProfile } from '../types';
 import { logDebug } from '../utils/logger';
+import type { DBUser } from '../types/database';
 
 interface LoginProps {
   onLoginSuccess: (user: UserProfile) => void;
 }
 
 type AuthMode = 'login' | 'signup';
+
+// Helper to convert DBUser to UserProfile
+const dbUserToProfile = (user: DBUser): UserProfile => ({
+  id: user.id,
+  name: user.name,
+  username: user.username,
+  email: user.email || undefined,
+  age: user.age,
+  gender: user.gender || 'unknown',
+  coins: user.coins,
+  riskProfile: user.risk_profile || 'Unknown risk profile',
+  avatarUrl: user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
+  socialDebt: user.social_debt,
+  totalWins: user.total_wins,
+  totalClashes: user.total_clashes,
+  winStreak: user.win_streak,
+  bestWinStreak: user.best_win_streak,
+  stealSuccessful: user.steals_successful,
+  stealsDefended: user.steals_defended,
+  timesRobbed: user.times_robbed,
+  pushEnabled: user.push_enabled,
+  soundEnabled: user.sound_enabled,
+  hapticsEnabled: user.haptics_enabled,
+  trustScore: user.trust_score,
+  isVerified: user.is_verified,
+  lastAllowanceClaimed: user.last_allowance_claimed || undefined,
+  lastLogin: user.last_login || undefined,
+  loginStreak: user.login_streak,
+});
 
 const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
@@ -18,6 +48,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [showEmailForm, setShowEmailForm] = useState(false);
   const oauthInProgress = useRef(false);
+  const oauthHandled = useRef(false);
   const onLoginSuccessRef = useRef(onLoginSuccess);
 
   // Form fields
@@ -105,6 +136,59 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
     return () => {
       handle.then(h => h.remove());
+    };
+  }, []);
+
+  // Direct URL listener for OAuth callback - this catches the deep link
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const handleUrl = async (url: string) => {
+      logDebug('[Login] Direct URL received:', url);
+      if (oauthHandled.current) {
+        logDebug('[Login] OAuth already handled, skipping');
+        return;
+      }
+
+      if (!url.includes('auth/callback') && !url.includes('access_token')) {
+        return;
+      }
+
+      logDebug('[Login] Processing OAuth callback URL');
+      oauthHandled.current = true;
+
+      const result = await handleOAuthCallback(url);
+      logDebug('[Login] OAuth callback result:', { hasUser: !!result.user, error: result.error });
+
+      if (result.user) {
+        const profile = dbUserToProfile(result.user);
+        oauthInProgress.current = false;
+        setLoading(false);
+        setCheckingAuth(false);
+        onLoginSuccessRef.current(profile);
+      } else {
+        oauthHandled.current = false; // Reset so we can try again
+        setError(result.error || 'OAuth failed');
+        setLoading(false);
+      }
+    };
+
+    // Listen for URL open events
+    const urlHandle = App.addListener('appUrlOpen', (data) => {
+      logDebug('[Login] appUrlOpen event:', data.url);
+      handleUrl(data.url);
+    });
+
+    // Check launch URL on mount (for cold start)
+    App.getLaunchUrl().then(({ url }) => {
+      if (url) {
+        logDebug('[Login] Launch URL found:', url);
+        handleUrl(url);
+      }
+    }).catch(() => {});
+
+    return () => {
+      urlHandle.then(h => h.remove());
     };
   }, []);
 

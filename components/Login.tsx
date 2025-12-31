@@ -27,61 +27,79 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
 
-  // Listen for app resume to reset loading state if OAuth didn't complete
+  // Helper to check session and navigate
+  const checkSessionAndNavigate = async () => {
+    try {
+      const { user } = await getOrCreateProfileFromSession();
+      if (user) {
+        const profile: UserProfile = {
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          email: user.email || undefined,
+          age: user.age,
+          gender: user.gender || 'unknown',
+          coins: user.coins,
+          riskProfile: user.risk_profile || 'Unknown risk profile',
+          avatarUrl: user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
+          socialDebt: user.social_debt,
+          totalWins: user.total_wins,
+          totalClashes: user.total_clashes,
+          winStreak: user.win_streak,
+          bestWinStreak: user.best_win_streak,
+          stealSuccessful: user.steals_successful,
+          stealsDefended: user.steals_defended,
+          timesRobbed: user.times_robbed,
+          pushEnabled: user.push_enabled,
+          soundEnabled: user.sound_enabled,
+          hapticsEnabled: user.haptics_enabled,
+          trustScore: user.trust_score,
+          isVerified: user.is_verified,
+          lastAllowanceClaimed: user.last_allowance_claimed || undefined,
+          lastLogin: user.last_login || undefined,
+          loginStreak: user.login_streak,
+        };
+        oauthInProgress.current = false;
+        setLoading(false);
+        setCheckingAuth(false);
+        logDebug('[Login] Session found, navigating with profile:', profile.id);
+        onLoginSuccessRef.current(profile);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  // Listen for app resume to check session after OAuth
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
     const handle = App.addListener('appStateChange', (state) => {
       if (state.isActive && oauthInProgress.current) {
-        // App resumed from OAuth flow - give it a moment then reset if still loading
-        setTimeout(() => {
-          if (oauthInProgress.current) {
-            getOrCreateProfileFromSession()
-              .then(({ user }) => {
-                if (user) {
-                  const profile: UserProfile = {
-                    id: user.id,
-                    name: user.name,
-                    username: user.username,
-                    email: user.email || undefined,
-                    age: user.age,
-                    gender: user.gender || 'unknown',
-                    coins: user.coins,
-                    riskProfile: user.risk_profile || 'Unknown risk profile',
-                    avatarUrl: user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
-                    socialDebt: user.social_debt,
-                    totalWins: user.total_wins,
-                    totalClashes: user.total_clashes,
-                    winStreak: user.win_streak,
-                    bestWinStreak: user.best_win_streak,
-                    stealSuccessful: user.steals_successful,
-                    stealsDefended: user.steals_defended,
-                    timesRobbed: user.times_robbed,
-                    pushEnabled: user.push_enabled,
-                    soundEnabled: user.sound_enabled,
-                    hapticsEnabled: user.haptics_enabled,
-                    trustScore: user.trust_score,
-                    isVerified: user.is_verified,
-                    lastAllowanceClaimed: user.last_allowance_claimed || undefined,
-                    lastLogin: user.last_login || undefined,
-                    loginStreak: user.login_streak,
-                  };
+        logDebug('[Login] App resumed from OAuth, checking session...');
+        // Quick check first, then poll if needed
+        checkSessionAndNavigate().then((success) => {
+          if (!success && oauthInProgress.current) {
+            // Poll a few times with short intervals
+            let attempts = 0;
+            const maxAttempts = 5;
+            const pollInterval = setInterval(async () => {
+              attempts++;
+              logDebug(`[Login] Polling for session (attempt ${attempts}/${maxAttempts})`);
+              const found = await checkSessionAndNavigate();
+              if (found || attempts >= maxAttempts) {
+                clearInterval(pollInterval);
+                if (!found) {
+                  logDebug('[Login] No session found after polling, resetting');
                   oauthInProgress.current = false;
                   setLoading(false);
-                  setCheckingAuth(false);
-                  onLoginSuccessRef.current(profile);
-                  return;
                 }
-
-                oauthInProgress.current = false;
-                setLoading(false);
-              })
-              .catch(() => {
-                oauthInProgress.current = false;
-                setLoading(false);
-              });
+              }
+            }, 500);
           }
-        }, 3000);
+        });
       }
     });
 

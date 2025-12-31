@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { signInWithGoogle, setupOAuthListener, onAuthStateChange, signIn, signUp, resetOAuthCallback, getOrCreateProfileFromSession } from '../services/auth';
+import { supabase } from '../services/supabase';
 import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import type { UserProfile } from '../types';
@@ -142,9 +143,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   // Direct URL listener for OAuth callback - simplified based on Supabase docs
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-
-    // Import supabase here to avoid circular dependency
-    const { supabase } = require('../services/supabase');
 
     const handleUrl = async (url: string) => {
       logDebug('[Login] Deep link received:', url);

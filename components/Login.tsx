@@ -236,7 +236,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           lastLogin: result.user.last_login || undefined,
           loginStreak: result.user.login_streak,
         };
-        onLoginSuccess(profile);
+        onLoginSuccessRef.current(profile);
       }
     } else {
       const result = await signIn({ email, password });
@@ -275,7 +275,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           lastLogin: result.user.last_login || undefined,
           loginStreak: result.user.login_streak,
         };
-        onLoginSuccess(profile);
+        onLoginSuccessRef.current(profile);
       }
     }
 
@@ -543,7 +543,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               isVerified: false,
               loginStreak: 1,
             };
-            onLoginSuccess(devProfile);
+            onLoginSuccessRef.current(devProfile);
           }}
           className="mt-4 text-gray-600 text-xs underline hover:text-gray-400"
         >

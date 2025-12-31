@@ -390,7 +390,7 @@ const App: React.FC = () => {
   };
 
   // Handle successful login
-  const handleLoginSuccess = (profile: UserProfile) => {
+  const handleLoginSuccess = useCallback((profile: UserProfile) => {
     logDebug('[App] handleLoginSuccess called:', {
       userId: profile.id,
       riskProfile: profile.riskProfile,
@@ -401,7 +401,32 @@ const App: React.FC = () => {
     const nextView = resolvePostAuthView(profile);
     logDebug('[App] handleLoginSuccess ->', nextView);
     setView(nextView);
-  };
+  }, []);
+
+  const checkSessionAndRoute = useCallback(async () => {
+    if (view !== AppView.SPLASH) return false;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return false;
+
+    const { data, error } = await supabase
+      .from('bb_users')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
+
+    if (!data) {
+      logDebug('[App] Session found but profile missing', { error: error?.message });
+      return false;
+    }
+
+    const profile = mapDBUserToProfile(data as DBUser);
+    const nextView = resolvePostAuthView(profile);
+    logDebug('[App] Session hydrate routing ->', nextView);
+    setAuthUserId(profile.id);
+    setView(nextView);
+    return true;
+  }, [view]);
 
   // Fallback: if auth is established but we're still on SPLASH, advance to the right screen
   useEffect(() => {
@@ -411,6 +436,25 @@ const App: React.FC = () => {
     logDebug('[App] Auth fallback routing ->', nextView);
     setView(nextView);
   }, [authUserId, user, view]);
+
+  // Poll for session while on login to catch missed auth events
+  useEffect(() => {
+    if (view !== AppView.SPLASH || authUserId) return;
+
+    let active = true;
+    const poll = async () => {
+      if (!active) return;
+      await checkSessionAndRoute();
+    };
+
+    poll();
+    const interval = setInterval(poll, 2000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [authUserId, checkSessionAndRoute, view]);
 
   const handleOnboardingComplete = async (profile: UserProfile) => {
     // Update profile in Supabase with extended profile data

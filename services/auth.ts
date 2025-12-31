@@ -436,14 +436,15 @@ export const setupOAuthListener = (
   }
 
   // For native, listen for app URL events (deep link callback)
-  const urlHandle = App.addListener('appUrlOpen', async (data) => {
-    logDebug('[Auth] appUrlOpen received:', data.url);
+  const maybeHandleUrl = async (url?: string | null) => {
+    if (!url) return;
+    logDebug('[Auth] OAuth url check:', url);
     if (oauthCallbackHandled) {
       logDebug('[Auth] OAuth callback already handled, skipping');
       return;
     }
 
-    if (data.url.includes('auth/callback') || data.url.includes('access_token')) {
+    if (url.includes('auth/callback') || url.includes('access_token') || url.includes('code=')) {
       oauthCallbackHandled = true;
 
       // Close the browser
@@ -453,7 +454,7 @@ export const setupOAuthListener = (
         logDebug('[Auth] Browser.close() failed or not needed');
       }
 
-      const result = await handleOAuthCallback(data.url);
+      const result = await handleOAuthCallback(url);
       logDebug('[Auth] OAuth callback result:', { hasUser: !!result.user, error: result.error });
       if (result.user) {
         onSuccess(result.user);
@@ -461,7 +462,17 @@ export const setupOAuthListener = (
         onError(result.error);
       }
     }
+  };
+
+  const urlHandle = App.addListener('appUrlOpen', async (data) => {
+    logDebug('[Auth] appUrlOpen received:', data.url);
+    await maybeHandleUrl(data.url);
   });
+
+  // Handle cold-start deep links that may bypass appUrlOpen
+  App.getLaunchUrl()
+    .then(({ url }) => maybeHandleUrl(url))
+    .catch(() => {});
 
   // Also listen for app resume - check session when returning from browser
   const resumeHandle = App.addListener('appStateChange', async (state) => {
@@ -473,6 +484,16 @@ export const setupOAuthListener = (
       if (oauthCallbackHandled) {
         logDebug('[Auth] OAuth already handled, skipping resume check');
         return;
+      }
+
+      try {
+        const { url } = await App.getLaunchUrl();
+        await maybeHandleUrl(url);
+        if (oauthCallbackHandled) {
+          return;
+        }
+      } catch {
+        // Ignore launch URL failures; we'll still try session checks.
       }
 
       // Try multiple times with increasing delays to catch the session

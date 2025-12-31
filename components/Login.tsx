@@ -18,6 +18,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [showEmailForm, setShowEmailForm] = useState(false);
   const oauthInProgress = useRef(false);
+  const onLoginSuccessRef = useRef(onLoginSuccess);
 
   // Form fields
   const [email, setEmail] = useState('');
@@ -46,6 +47,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       handle.then(h => h.remove());
     };
   }, []);
+
+  useEffect(() => {
+    onLoginSuccessRef.current = onLoginSuccess;
+  }, [onLoginSuccess]);
 
   useEffect(() => {
     // Check for existing session
@@ -83,7 +88,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           lastLogin: user.last_login || undefined,
           loginStreak: user.login_streak,
         };
-        onLoginSuccess(profile);
+        onLoginSuccessRef.current(profile);
       }
     });
 
@@ -121,7 +126,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         };
         setLoading(false);
         logDebug('[Login] Calling onLoginSuccess with profile');
-        onLoginSuccess(profile);
+        onLoginSuccessRef.current(profile);
       },
       (err) => {
         logDebug('[Login] OAuth error callback:', err);
@@ -144,7 +149,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       cleanupOAuth();
       clearTimeout(timeout);
     };
-  }, [onLoginSuccess]);
+  }, []);
 
   const handleGoogleSignIn = async () => {
     setLoading(true);

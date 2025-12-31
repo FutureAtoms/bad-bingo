@@ -16,6 +16,8 @@
 **Recent Fixes:** 2025-12-31
 - Added auth fallback navigation so the app exits login after a session is established
 - Refreshed friends list after sending requests to avoid needing an app restart
+- Added a login-screen session poller to catch missed auth events and route correctly
+- Hardened Google OAuth callbacks with launch-url handling and stable login listeners
 
 ---
 

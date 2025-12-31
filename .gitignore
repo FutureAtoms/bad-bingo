@@ -12,6 +12,21 @@ dist
 dist-ssr
 *.local
 
+# Env and secrets
+.env
+.env.*
+!.env.example
+client_secret_*.json
+android/app/google-services.json
+*.keystore
+*.jks
+*.p12
+
+# Build artifacts
+*.apk
+*.aab
+secrets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

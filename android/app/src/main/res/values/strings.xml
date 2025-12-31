@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Bad Bingo</string>
+    <string name="title_activity_main">Bad Bingo</string>
+    <string name="package_name">com.badbingo.app</string>
+    <string name="custom_url_scheme">com.badbingo.app</string>
+</resources>

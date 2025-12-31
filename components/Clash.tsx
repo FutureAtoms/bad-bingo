@@ -87,10 +87,17 @@ const Clash: React.FC<ClashProps> = ({ friend, user, onClose, onBetCreated }) =>
       if (isBet) {
         onBetCreated({
           id: currentBet.id,
+          betId: currentBet.id,
           scenario: currentBet.text,
+          opponentId: friend.id,
           opponentName: friend.name,
           stake: currentBet.stake,
-          status: 'pending_proof'
+          totalPot: currentBet.stake * 2,
+          status: 'pending_proof',
+          isProver: userVote === true, // User voted yes = they need to prove
+          proofType: currentBet.proofType,
+          proofDeadline: currentBet.expiresAt,
+          createdAt: new Date().toISOString(),
         });
         if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
       } else {
@@ -115,7 +122,8 @@ const Clash: React.FC<ClashProps> = ({ friend, user, onClose, onBetCreated }) =>
     return (
       <div className="h-full flex flex-col items-center justify-center bg-bingo-black text-acid-green">
         <i className="fas fa-cat fa-spin text-4xl mb-4"></i>
-        <p className="animate-pulse tracking-widest uppercase">Sharpening Claws...</p>
+        <p className="animate-pulse tracking-widest uppercase">Digging up dirt on {friend.name}...</p>
+        <p className="text-gray-600 text-xs mt-2 italic">This better be worth my time.</p>
       </div>
     );
   }
@@ -151,8 +159,8 @@ const Clash: React.FC<ClashProps> = ({ friend, user, onClose, onBetCreated }) =>
           <i className="fas fa-times text-2xl"></i>
         </button>
         <div className="text-center">
-          <h2 className="text-acid-green font-bold text-xl uppercase italic tracking-tighter">CLAW-OFF</h2>
-          <p className="text-[10px] text-white uppercase">Sizing up {friend.name}</p>
+          <h2 className="text-acid-green font-bold text-xl uppercase italic tracking-tighter">THE ARENA</h2>
+          <p className="text-[10px] text-white uppercase">vs {friend.name} • no mercy</p>
         </div>
         <div className="w-8"></div>
       </div>
@@ -167,12 +175,12 @@ const Clash: React.FC<ClashProps> = ({ friend, user, onClose, onBetCreated }) =>
           className="bg-black/80 border-2 border-white/50 p-6 rounded-sm shadow-[0_0_40px_rgba(204,255,0,0.15)] backdrop-blur-sm max-w-sm w-full relative"
           style={cardStyle}
         >
-          <div className="absolute top-4 right-4 border-4 border-alert-red text-alert-red font-black text-4xl p-2 rounded transform rotate-12 opacity-0" style={{ opacity: opacityNope }}>HISS</div>
-          <div className="absolute top-4 left-4 border-4 border-acid-green text-acid-green font-black text-4xl p-2 rounded transform -rotate-12 opacity-0" style={{ opacity: opacityLike }}>PAWS UP</div>
+          <div className="absolute top-4 right-4 border-4 border-alert-red text-alert-red font-black text-4xl p-2 rounded transform rotate-12 opacity-0" style={{ opacity: opacityNope }}>NAH</div>
+          <div className="absolute top-4 left-4 border-4 border-acid-green text-acid-green font-black text-4xl p-2 rounded transform -rotate-12 opacity-0" style={{ opacity: opacityLike }}>BET</div>
 
           <div className="text-hot-pink font-bold text-[10px] mb-2 tracking-widest uppercase flex justify-between">
             <span>{currentBet?.category}</span>
-            <span>{currentBet?.stake} TUNA 😼</span>
+            <span>{currentBet?.stake} BINGOS 😼</span>
           </div>
           <h1 className="text-2xl font-bold text-white font-sans leading-tight mb-4 pointer-events-none italic">
             "I bet {currentBet?.text.replace("Bet ", "")}"
@@ -186,22 +194,22 @@ const Clash: React.FC<ClashProps> = ({ friend, user, onClose, onBetCreated }) =>
       {showTutorial && (
         <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center animate-in fade-in duration-300 px-8 text-center" onClick={dismissTutorial}>
            <i className="fas fa-cat text-5xl text-acid-green mb-6 animate-bounce"></i>
-           <h2 className="text-2xl font-bold text-white mb-4 tracking-tighter">HOW TO SCRATCH</h2>
+           <h2 className="text-2xl font-bold text-white mb-4 tracking-tighter">PAY ATTENTION, STRAY</h2>
            <div className="grid grid-cols-2 gap-8 mb-8 w-full">
                <div>
-                   <div className="text-alert-red font-black text-2xl">LEFT</div>
-                   <div className="text-xs text-gray-500 uppercase">Hiss (No Way)</div>
+                   <div className="text-alert-red font-black text-2xl">← LEFT</div>
+                   <div className="text-xs text-gray-500 uppercase">"Nah, no way"</div>
                </div>
                <div>
-                   <div className="text-acid-green font-black text-2xl">RIGHT</div>
-                   <div className="text-xs text-gray-500 uppercase">Paws Up (I Bet)</div>
+                   <div className="text-acid-green font-black text-2xl">RIGHT →</div>
+                   <div className="text-xs text-gray-500 uppercase">"I'd bet on it"</div>
                </div>
            </div>
            <p className="text-gray-400 text-sm mb-10 italic">
-             "If you disagree with {friend.name}, we've got a CLASH. If we agree, it's just a hairball."
+             "When you and {friend.name} disagree... that's when bingos get locked in. Same answer? Boring. Move on."
            </p>
            <button onClick={dismissTutorial} className="bg-acid-green text-black font-black py-4 px-10 rounded-sm hover:scale-105 transition-transform uppercase tracking-widest text-sm">
-              Enter the Alley
+              LET'S GET MESSY
             </button>
         </div>
       )}
@@ -209,8 +217,8 @@ const Clash: React.FC<ClashProps> = ({ friend, user, onClose, onBetCreated }) =>
       {result === 'match' && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 animate-in fade-in duration-200 pointer-events-none">
             <div className="text-center transform scale-150 animate-bounce">
-                <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-alert-red to-orange-500 italic">CLAWED!</h1>
-                <p className="text-white font-bold tracking-widest mt-2 uppercase text-xs">Tuna Locked In</p>
+                <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-alert-red to-orange-500 italic">CLAWS OUT!</h1>
+                <p className="text-white font-bold tracking-widest mt-2 uppercase text-xs">Someone's about to eat dirt 😼</p>
             </div>
         </div>
       )}
@@ -219,8 +227,8 @@ const Clash: React.FC<ClashProps> = ({ friend, user, onClose, onBetCreated }) =>
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 animate-in fade-in duration-200 pointer-events-none">
              <div className="text-center">
                 <i className="fas fa-wind text-6xl text-gray-700 mb-4"></i>
-                <h1 className="text-4xl font-black text-gray-500 uppercase italic">Hairball</h1>
-                <p className="text-gray-600 text-xs">You both agree. Snooze.</p>
+                <h1 className="text-4xl font-black text-gray-500 uppercase italic">*yawns*</h1>
+                <p className="text-gray-600 text-xs">You both agree. How disappointingly peaceful.</p>
             </div>
         </div>
       )}

@@ -12,9 +12,17 @@ View your app in AI Studio: https://ai.studio/apps/drive/1ap7x-wm1sWHKVXNapyYVVt
 
 **Prerequisites:**  Node.js
 
-
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Create `.env.local` from `.env.example` and set:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_GEMINI_API_KEY`
 3. Run the app:
    `npm run dev`
+
+## Secrets (GCP)
+
+If using Google Secret Manager:
+- Upload secrets: `scripts/gcloud-secrets-upload.sh`
+- Fetch secrets: `scripts/gcloud-secrets-fetch.sh`

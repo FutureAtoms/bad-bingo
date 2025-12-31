@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { signInWithGoogle, setupOAuthListener, onAuthStateChange, signIn, signUp, resetOAuthCallback, getOrCreateProfileFromSession, handleOAuthCallback } from '../services/auth';
+import { signInWithGoogle, setupOAuthListener, onAuthStateChange, signIn, signUp, resetOAuthCallback, getOrCreateProfileFromSession } from '../services/auth';
 import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import type { UserProfile } from '../types';
@@ -139,50 +139,80 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     };
   }, []);
 
-  // Direct URL listener for OAuth callback - this catches the deep link
+  // Direct URL listener for OAuth callback - simplified based on Supabase docs
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
+    // Import supabase here to avoid circular dependency
+    const { supabase } = require('../services/supabase');
+
     const handleUrl = async (url: string) => {
-      logDebug('[Login] Direct URL received:', url);
+      logDebug('[Login] Deep link received:', url);
+
+      if (!url.includes('access_token') && !url.includes('code=')) {
+        return;
+      }
+
       if (oauthHandled.current) {
-        logDebug('[Login] OAuth already handled, skipping');
+        logDebug('[Login] Already handled, skipping');
         return;
       }
-
-      if (!url.includes('auth/callback') && !url.includes('access_token')) {
-        return;
-      }
-
-      logDebug('[Login] Processing OAuth callback URL');
       oauthHandled.current = true;
 
-      const result = await handleOAuthCallback(url);
-      logDebug('[Login] OAuth callback result:', { hasUser: !!result.user, error: result.error });
+      try {
+        // Parse tokens from URL hash (Supabase uses hash fragment)
+        const urlObj = new URL(url);
+        const hashParams = new URLSearchParams(urlObj.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
 
-      if (result.user) {
-        const profile = dbUserToProfile(result.user);
-        oauthInProgress.current = false;
+        logDebug('[Login] Tokens found:', { hasAccess: !!accessToken, hasRefresh: !!refreshToken });
+
+        if (accessToken) {
+          // Set session directly - this is the key!
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || '',
+          });
+
+          logDebug('[Login] setSession result:', { hasSession: !!data.session, error: error?.message });
+
+          if (data.session) {
+            // Session is set, now get/create user profile
+            const result = await getOrCreateProfileFromSession();
+            if (result.user) {
+              const profile = dbUserToProfile(result.user);
+              oauthInProgress.current = false;
+              setLoading(false);
+              setCheckingAuth(false);
+              onLoginSuccessRef.current(profile);
+              return;
+            }
+          }
+        }
+
+        // If we get here, something failed
+        oauthHandled.current = false;
+        setError('Failed to complete sign in');
         setLoading(false);
-        setCheckingAuth(false);
-        onLoginSuccessRef.current(profile);
-      } else {
-        oauthHandled.current = false; // Reset so we can try again
-        setError(result.error || 'OAuth failed');
+      } catch (err) {
+        logDebug('[Login] Error handling deep link:', err);
+        oauthHandled.current = false;
+        setError('Authentication error');
         setLoading(false);
       }
     };
 
     // Listen for URL open events
     const urlHandle = App.addListener('appUrlOpen', (data) => {
-      logDebug('[Login] appUrlOpen event:', data.url);
+      logDebug('[Login] appUrlOpen:', data.url);
       handleUrl(data.url);
     });
 
     // Check launch URL on mount (for cold start)
     App.getLaunchUrl().then(({ url }) => {
       if (url) {
-        logDebug('[Login] Launch URL found:', url);
+        logDebug('[Login] Launch URL:', url);
         handleUrl(url);
       }
     }).catch(() => {});

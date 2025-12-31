@@ -18,7 +18,15 @@ if (!isSupabaseConfigured) {
 // Create client with fallback values to prevent crash (will fail gracefully at runtime)
 export const supabase: SupabaseClient<Database> = createClient<Database>(
   supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key'
+  supabaseAnonKey || 'placeholder-key',
+  {
+    auth: {
+      flowType: 'pkce',
+      detectSessionInUrl: true,
+      autoRefreshToken: true,
+      persistSession: true,
+    },
+  }
 );
 
 // Untyped client for operations where TypeScript inference fails

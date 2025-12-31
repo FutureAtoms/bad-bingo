@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { signInWithGoogle, setupOAuthListener, onAuthStateChange, signIn, signUp, resetOAuthCallback } from '../services/auth';
+import { signInWithGoogle, setupOAuthListener, onAuthStateChange, signIn, signUp, resetOAuthCallback, getOrCreateProfileFromSession } from '../services/auth';
 import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import type { UserProfile } from '../types';
@@ -36,8 +36,50 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         // App resumed from OAuth flow - give it a moment then reset if still loading
         setTimeout(() => {
           if (oauthInProgress.current) {
-            oauthInProgress.current = false;
-            setLoading(false);
+            getOrCreateProfileFromSession()
+              .then(({ user }) => {
+                if (user) {
+                  const profile: UserProfile = {
+                    id: user.id,
+                    name: user.name,
+                    username: user.username,
+                    email: user.email || undefined,
+                    age: user.age,
+                    gender: user.gender || 'unknown',
+                    coins: user.coins,
+                    riskProfile: user.risk_profile || 'Unknown risk profile',
+                    avatarUrl: user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
+                    socialDebt: user.social_debt,
+                    totalWins: user.total_wins,
+                    totalClashes: user.total_clashes,
+                    winStreak: user.win_streak,
+                    bestWinStreak: user.best_win_streak,
+                    stealSuccessful: user.steals_successful,
+                    stealsDefended: user.steals_defended,
+                    timesRobbed: user.times_robbed,
+                    pushEnabled: user.push_enabled,
+                    soundEnabled: user.sound_enabled,
+                    hapticsEnabled: user.haptics_enabled,
+                    trustScore: user.trust_score,
+                    isVerified: user.is_verified,
+                    lastAllowanceClaimed: user.last_allowance_claimed || undefined,
+                    lastLogin: user.last_login || undefined,
+                    loginStreak: user.login_streak,
+                  };
+                  oauthInProgress.current = false;
+                  setLoading(false);
+                  setCheckingAuth(false);
+                  onLoginSuccessRef.current(profile);
+                  return;
+                }
+
+                oauthInProgress.current = false;
+                setLoading(false);
+              })
+              .catch(() => {
+                oauthInProgress.current = false;
+                setLoading(false);
+              });
           }
         }, 3000);
       }

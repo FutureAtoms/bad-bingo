@@ -205,6 +205,48 @@ export function useFriends(userId: string | null) {
     fetchFriends();
   }, [fetchFriends]);
 
+  // Realtime updates for friend requests and status changes
+  useEffect(() => {
+    if (!userId) return;
+
+    const outboundSubscription = supabase
+      .channel(`friends:outbound:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bb_friendships',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          fetchFriends();
+        }
+      )
+      .subscribe();
+
+    const inboundSubscription = supabase
+      .channel(`friends:inbound:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bb_friendships',
+          filter: `friend_id=eq.${userId}`,
+        },
+        () => {
+          fetchFriends();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      outboundSubscription.unsubscribe();
+      inboundSubscription.unsubscribe();
+    };
+  }, [fetchFriends, userId]);
+
   return { friends, loading, error, refetch: fetchFriends, addFriend, acceptFriend, removeFriend };
 }
 

@@ -165,6 +165,17 @@ export const getCurrentUser = async (): Promise<{ user: DBUser | null; error: st
   return { user: userData, error: userError?.message || null };
 };
 
+// Get or create user profile from current session
+export const getOrCreateProfileFromSession = async (): Promise<{ user: DBUser | null; error: string | null }> => {
+  const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !authUser) {
+    return { user: null, error: authError?.message || 'Not authenticated' };
+  }
+
+  return getOrCreateUserProfile(authUser.id, authUser.email, authUser.user_metadata);
+};
+
 // Update user profile
 export const updateProfile = async (
   userId: string,
@@ -444,23 +455,24 @@ export const setupOAuthListener = (
       return;
     }
 
-    if (url.includes('auth/callback') || url.includes('access_token') || url.includes('code=')) {
+    if (!url.includes('auth/callback') && !url.includes('access_token') && !url.includes('code=')) {
+      return;
+    }
+
+    // Close the browser
+    try {
+      await Browser.close();
+    } catch {
+      logDebug('[Auth] Browser.close() failed or not needed');
+    }
+
+    const result = await handleOAuthCallback(url);
+    logDebug('[Auth] OAuth callback result:', { hasUser: !!result.user, error: result.error });
+    if (result.user) {
       oauthCallbackHandled = true;
-
-      // Close the browser
-      try {
-        await Browser.close();
-      } catch {
-        logDebug('[Auth] Browser.close() failed or not needed');
-      }
-
-      const result = await handleOAuthCallback(url);
-      logDebug('[Auth] OAuth callback result:', { hasUser: !!result.user, error: result.error });
-      if (result.user) {
-        onSuccess(result.user);
-      } else if (result.error) {
-        onError(result.error);
-      }
+      onSuccess(result.user);
+    } else if (result.error) {
+      onError(result.error);
     }
   };
 
@@ -514,7 +526,6 @@ export const setupOAuthListener = (
           });
 
           if (session?.user) {
-            oauthCallbackHandled = true;
             logDebug('[Auth] Session found on resume, creating profile...');
             const { user, error } = await getOrCreateUserProfile(
               session.user.id,
@@ -523,6 +534,7 @@ export const setupOAuthListener = (
             );
             logDebug('[Auth] Profile result:', { hasUser: !!user, error });
             if (user) {
+              oauthCallbackHandled = true;
               onSuccess(user);
             } else if (error) {
               onError(error);

@@ -24,7 +24,7 @@ import { AppView, UserProfile, Friend, ActiveBet, RelationshipLevel, InGameNotif
 import { triggerChallengeEffect } from './services/effects';
 import { initializePushNotifications, setupPushListeners, isPushAvailable } from './services/pushNotifications';
 import { savePushToken } from './services/pushTokenService';
-import { onAuthStateChange, signOut, updateProfile as updateUserProfile } from './services/auth';
+import { onAuthStateChange, signOut, updateProfile as updateUserProfile, getOrCreateProfileFromSession } from './services/auth';
 import { useUser, useFriends, useActiveBets, useNotifications } from './hooks/useSupabaseData';
 import { supabase, db, isSupabaseConfigured } from './services/supabase';
 import type { DBUser } from './types/database';
@@ -160,20 +160,15 @@ const App: React.FC = () => {
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
-            const { data, error } = await supabase
-              .from('bb_users')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
-
-            if (data) {
-              const profile = mapDBUserToProfile(data as DBUser);
+            const { user: profileUser, error } = await getOrCreateProfileFromSession();
+            if (profileUser) {
+              const profile = mapDBUserToProfile(profileUser);
               const nextView = resolvePostAuthView(profile);
-              logDebug('[App] Session found without profile payload, routing to:', nextView);
+              logDebug('[App] Session hydrate routing ->', nextView);
               setAuthUserId(profile.id);
               setView(nextView);
             } else {
-              logDebug('[App] Session found but no profile, showing SPLASH', { error: error?.message });
+              logDebug('[App] Session found but profile unresolved, showing SPLASH', { error });
               setAuthUserId(null);
               setView(AppView.SPLASH);
             }
@@ -409,18 +404,13 @@ const App: React.FC = () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return false;
 
-    const { data, error } = await supabase
-      .from('bb_users')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
-
-    if (!data) {
-      logDebug('[App] Session found but profile missing', { error: error?.message });
+    const { user: profileUser, error } = await getOrCreateProfileFromSession();
+    if (!profileUser) {
+      logDebug('[App] Session found but profile missing', { error });
       return false;
     }
 
-    const profile = mapDBUserToProfile(data as DBUser);
+    const profile = mapDBUserToProfile(profileUser);
     const nextView = resolvePostAuthView(profile);
     logDebug('[App] Session hydrate routing ->', nextView);
     setAuthUserId(profile.id);

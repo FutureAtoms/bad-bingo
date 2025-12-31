@@ -18,6 +18,8 @@
 - Refreshed friends list after sending requests to avoid needing an app restart
 - Added a login-screen session poller to catch missed auth events and route correctly
 - Hardened Google OAuth callbacks with launch-url handling and stable login listeners
+- Added friend request realtime subscriptions so incoming/outgoing updates appear without restarts
+- Added session-to-profile hydration to avoid stuck login after OAuth resume
 
 ---
 

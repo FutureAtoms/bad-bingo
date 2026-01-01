@@ -2,7 +2,6 @@ import { supabase } from './supabase';
 import type { DBNotification, DBUser } from '../types/database';
 import { createNotification } from './notifications';
 import { getUserPushTokens } from './pushTokenService';
-import { showLocalNotification } from './pushNotifications';
 
 // Notification types for broadcasting
 export type NotificationType =
@@ -258,6 +257,10 @@ export const broadcastBetExpired = async (
 };
 
 // Send push notification to a single user
+// NOTE: This function sends FCM push to the target user's device.
+// Local notifications for the RECIPIENT are handled by App.tsx's realtime
+// subscription to bb_notifications. Do NOT call showLocalNotification() here
+// as it would show on the SENDER's device, not the recipient's.
 export const sendPushToUser = async (
   userId: string,
   config: BroadcastConfig
@@ -265,22 +268,11 @@ export const sendPushToUser = async (
   try {
     const { tokens, error: tokensError } = await getUserPushTokens(userId);
 
-    // Always try local notification first as fallback
-    // This ensures notifications work even without FCM/Google Play Services
-    await showLocalNotification(
-      config.title,
-      config.message,
-      {
-        type: config.type,
-        ...config.data,
-        userId,
-        timestamp: Date.now(),
-      }
-    );
-
     if (tokensError || tokens.length === 0) {
-      console.log('No push tokens, using local notification only');
-      return true; // Local notification was shown
+      // No FCM tokens available - rely on realtime subscription in recipient's app
+      // The recipient's App.tsx subscribes to bb_notifications and shows local notification
+      console.log('No push tokens for user:', userId, '- recipient will get notification via realtime subscription');
+      return true;
     }
 
     const { error: invokeError } = await supabase.functions.invoke('send-push-notification', {
@@ -299,7 +291,7 @@ export const sendPushToUser = async (
 
     if (invokeError) {
       console.error('Push notification error:', invokeError);
-      // Local notification was already shown as fallback
+      // FCM failed - rely on realtime subscription fallback
       return true;
     }
 

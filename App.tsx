@@ -22,7 +22,7 @@ import AgeVerification from './components/AgeVerification';
 import ReportModal, { ReportType } from './components/ReportModal';
 import { AppView, UserProfile, Friend, ActiveBet, RelationshipLevel, InGameNotification, StealAttempt, Debt, BegRequest } from './types';
 import { triggerChallengeEffect } from './services/effects';
-import { initializePushNotifications, setupPushListeners, isPushAvailable } from './services/pushNotifications';
+import { initializePushNotifications, setupPushListeners, isPushAvailable, showLocalNotification } from './services/pushNotifications';
 import { savePushToken } from './services/pushTokenService';
 import { onAuthStateChange, signOut, updateProfile as updateUserProfile, getOrCreateProfileFromSession } from './services/auth';
 import { useUser, useFriends, useActiveBets, useNotifications } from './hooks/useSupabaseData';
@@ -385,6 +385,66 @@ const App: React.FC = () => {
       stealSubscription.unsubscribe();
     };
   }, [authUserId, user]);
+
+  // 4. Realtime subscription for notifications (for cross-device push)
+  // This is CRITICAL: when another user creates a bet/notification for you,
+  // the notification is inserted into bb_notifications. Your app needs to
+  // listen for this and show a local notification in the Android tray.
+  useEffect(() => {
+    if (!authUserId) return;
+
+    logDebug('[App] Setting up notification subscription for user:', authUserId);
+
+    const notificationSubscription = supabase
+      .channel(`notifications:${authUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'bb_notifications',
+          filter: `user_id=eq.${authUserId}`,
+        },
+        async (payload) => {
+          const notification = payload.new as any;
+          logDebug('[App] New notification received via realtime:', notification);
+
+          // Show local notification in Android system tray
+          await showLocalNotification(
+            notification.title || 'Bad Bingo',
+            notification.message || 'You have a new notification',
+            {
+              type: notification.type,
+              referenceType: notification.reference_type,
+              referenceId: notification.reference_id,
+              notificationId: notification.id,
+            }
+          );
+
+          // Also show in-app toast
+          const notifType = notification.type || 'system';
+          const validTypes: Array<'robbery' | 'clash' | 'proof' | 'system' | 'badge' | 'debt' | 'beg'> = ['robbery', 'clash', 'proof', 'system', 'badge', 'debt', 'beg'];
+          addToastNotification({
+            id: notification.id || `notif-${Date.now()}`,
+            type: validTypes.includes(notifType as any) ? (notifType as 'robbery' | 'clash' | 'proof' | 'system' | 'badge' | 'debt' | 'beg') : 'system',
+            title: notification.title || 'Notification',
+            message: notification.message || '',
+            priority: notification.priority || 'normal',
+            read: false,
+            timestamp: Date.now()
+          });
+
+          // Refresh notifications list
+          refetchNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      logDebug('[App] Cleaning up notification subscription');
+      notificationSubscription.unsubscribe();
+    };
+  }, [authUserId, refetchNotifications]);
 
   // Fetch debts for borrow screen
   useEffect(() => {

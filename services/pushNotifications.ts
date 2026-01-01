@@ -1,4 +1,5 @@
 import { PushNotifications } from '@capacitor/push-notifications';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { logDebug, logError, logWarn } from '../utils/logger';
 
@@ -19,8 +20,11 @@ export const initializePushNotifications = async (): Promise<{
   }
 
   try {
-    // Request permission
+    // Request push notification permission
     const permResult = await PushNotifications.requestPermissions();
+
+    // Also request local notification permission
+    await LocalNotifications.requestPermissions();
 
     if (permResult.receive === 'granted') {
       // Register with APNs/FCM
@@ -66,9 +70,9 @@ export const setupPushListeners = (callbacks: {
     callbacks.onRegistration?.(token.value);
   });
 
-  // Registration error
+  // Registration error - still allow local notifications
   const regErrorListener = PushNotifications.addListener('registrationError', (error) => {
-    logError('Push registration error');
+    logError('Push registration error - FCM not available, using local notifications');
     callbacks.onRegistrationError?.(error.error);
   });
 
@@ -94,12 +98,24 @@ export const setupPushListeners = (callbacks: {
     });
   });
 
+  // Also setup local notification listeners
+  const localActionListener = LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
+    logDebug('Local notification tapped');
+    callbacks.onNotificationTapped?.({
+      id: String(action.notification.id),
+      title: action.notification.title || '',
+      body: action.notification.body || '',
+      data: action.notification.extra as Record<string, unknown>,
+    });
+  });
+
   // Return cleanup function
   return () => {
     regListener.then(l => l.remove());
     regErrorListener.then(l => l.remove());
     receivedListener.then(l => l.remove());
     actionListener.then(l => l.remove());
+    localActionListener.then(l => l.remove());
   };
 };
 
@@ -111,23 +127,55 @@ export interface PushNotificationData {
   data?: Record<string, unknown>;
 }
 
-// Show a local notification (useful for showing notifications when app is in foreground)
+// Show a local notification (shows in Android notification tray)
 export const showLocalNotification = async (
   title: string,
   body: string,
   data?: Record<string, unknown>
-) => {
+): Promise<boolean> => {
   if (!isPushAvailable()) {
     // Fallback for web - use browser notification API
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, { body });
+      return true;
     }
-    return;
+    return false;
   }
 
-  // For native, we'd need @capacitor/local-notifications
-  // For now, just log it
-  logDebug('Local notification:', { title, body, data });
+  try {
+    // Check permission first
+    const permStatus = await LocalNotifications.checkPermissions();
+    if (permStatus.display !== 'granted') {
+      await LocalNotifications.requestPermissions();
+    }
+
+    // Generate a unique ID
+    const notificationId = Math.floor(Math.random() * 2147483647);
+
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: notificationId,
+          title: title,
+          body: body,
+          channelId: 'bad_bingo_notifications',
+          smallIcon: 'ic_launcher',
+          largeIcon: 'ic_launcher',
+          extra: data,
+          sound: 'default',
+          attachments: undefined,
+          actionTypeId: '',
+          schedule: { at: new Date(Date.now() + 100) }, // Schedule for immediate
+        },
+      ],
+    });
+
+    logDebug('Local notification scheduled:', { title, body });
+    return true;
+  } catch (error) {
+    logError('Local notification error:', error);
+    return false;
+  }
 };
 
 // Get list of delivered notifications

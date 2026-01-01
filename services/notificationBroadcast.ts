@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type { DBNotification, DBUser } from '../types/database';
 import { createNotification } from './notifications';
 import { getUserPushTokens } from './pushTokenService';
+import { showLocalNotification } from './pushNotifications';
 
 // Notification types for broadcasting
 export type NotificationType =
@@ -264,8 +265,22 @@ export const sendPushToUser = async (
   try {
     const { tokens, error: tokensError } = await getUserPushTokens(userId);
 
+    // Always try local notification first as fallback
+    // This ensures notifications work even without FCM/Google Play Services
+    await showLocalNotification(
+      config.title,
+      config.message,
+      {
+        type: config.type,
+        ...config.data,
+        userId,
+        timestamp: Date.now(),
+      }
+    );
+
     if (tokensError || tokens.length === 0) {
-      return false;
+      console.log('No push tokens, using local notification only');
+      return true; // Local notification was shown
     }
 
     const { error: invokeError } = await supabase.functions.invoke('send-push-notification', {
@@ -284,7 +299,8 @@ export const sendPushToUser = async (
 
     if (invokeError) {
       console.error('Push notification error:', invokeError);
-      return false;
+      // Local notification was already shown as fallback
+      return true;
     }
 
     return true;

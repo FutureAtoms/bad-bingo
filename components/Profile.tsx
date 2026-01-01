@@ -86,6 +86,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onBack, onOpenRules, onOpenSett
     bio: user.bio || '',
     avatarUrl: user.avatarUrl,
   });
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
 
   // Check notification permission status on mount
   useEffect(() => {
@@ -116,6 +117,8 @@ const Profile: React.FC<ProfileProps> = ({ user, onBack, onOpenRules, onOpenSett
       bio: user.bio || '',
       avatarUrl: user.avatarUrl,
     });
+    // Reset avatar error state when user changes
+    setAvatarLoadError(false);
   }, [user]);
 
   // Fetch badges and transaction history from database
@@ -367,7 +370,14 @@ const Profile: React.FC<ProfileProps> = ({ user, onBack, onOpenRules, onOpenSett
                             disabled={isEditing}
                             className="w-24 h-24 rounded-full border-2 border-acid-green p-1 mb-4 shadow-[0_0_15px_rgba(204,255,0,0.3)] relative group cursor-pointer disabled:cursor-default transition-transform hover:scale-105 active:scale-95"
                         >
-                            <img src={isEditing ? editedFields.avatarUrl : user.avatarUrl} alt="Avatar" className="w-full h-full rounded-full bg-gray-800 object-cover" />
+                            <img
+                              src={avatarLoadError
+                                ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}&backgroundColor=b6e3f4`
+                                : (isEditing ? editedFields.avatarUrl : user.avatarUrl)}
+                              alt="Avatar"
+                              className="w-full h-full rounded-full bg-gray-800 object-cover"
+                              onError={() => setAvatarLoadError(true)}
+                            />
                             {!isEditing && (
                                 <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <i className="fas fa-camera text-white text-xl"></i>

@@ -104,141 +104,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  // Listen for app resume to check session after OAuth
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-
-    const handle = App.addListener('appStateChange', (state) => {
-      if (state.isActive && oauthInProgress.current) {
-        logDebug('[Login] App resumed from OAuth, checking session...');
-        // Quick check first, then poll if needed
-        checkSessionAndNavigate().then((success) => {
-          if (!success && oauthInProgress.current) {
-            // Poll a few times with short intervals
-            let attempts = 0;
-            const maxAttempts = 5;
-            const pollInterval = setInterval(async () => {
-              attempts++;
-              logDebug(`[Login] Polling for session (attempt ${attempts}/${maxAttempts})`);
-              const found = await checkSessionAndNavigate();
-              if (found || attempts >= maxAttempts) {
-                clearInterval(pollInterval);
-                if (!found) {
-                  logDebug('[Login] No session found after polling, resetting');
-                  oauthInProgress.current = false;
-                  setLoading(false);
-                }
-              }
-            }, 500);
-          }
-        });
-      }
-    });
-
-    return () => {
-      handle.then(h => h.remove());
-    };
-  }, []);
-
-  // Direct URL listener for OAuth callback - simplified based on Supabase docs
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-
-    const handleUrl = async (url: string) => {
-      logDebug('[Login] Deep link received:', url);
-
-      if (!url.includes('access_token') && !url.includes('code=')) {
-        return;
-      }
-
-      if (oauthHandled.current) {
-        logDebug('[Login] Already handled, skipping');
-        return;
-      }
-      oauthHandled.current = true;
-
-      try {
-        const urlObj = new URL(url);
-
-        // PKCE flow returns code in query params
-        const code = urlObj.searchParams.get('code');
-
-        // Non-PKCE flow returns tokens in hash
-        const hashParams = new URLSearchParams(urlObj.hash.substring(1));
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
-
-        logDebug('[Login] Parsed URL:', { hasCode: !!code, hasAccess: !!accessToken });
-
-        let sessionData = null;
-
-        if (code) {
-          // PKCE flow - exchange code for session
-          logDebug('[Login] Exchanging code for session...');
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) {
-            logDebug('[Login] Code exchange error:', error.message);
-            throw new Error(error.message);
-          }
-          sessionData = data;
-        } else if (accessToken) {
-          // Direct token flow
-          logDebug('[Login] Setting session with tokens...');
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken || '',
-          });
-          if (error) {
-            logDebug('[Login] setSession error:', error.message);
-            throw new Error(error.message);
-          }
-          sessionData = data;
-        }
-
-        if (sessionData?.session) {
-          logDebug('[Login] Session established, getting profile...');
-          // Session is set, now get/create user profile
-          const result = await getOrCreateProfileFromSession();
-          if (result.user) {
-            const profile = dbUserToProfile(result.user);
-            oauthInProgress.current = false;
-            setLoading(false);
-            setCheckingAuth(false);
-            onLoginSuccessRef.current(profile);
-            return;
-          }
-        }
-
-        // If we get here, something failed
-        oauthHandled.current = false;
-        setError('Failed to complete sign in');
-        setLoading(false);
-      } catch (err) {
-        logDebug('[Login] Error handling deep link:', err);
-        oauthHandled.current = false;
-        setError('Authentication error');
-        setLoading(false);
-      }
-    };
-
-    // Listen for URL open events
-    const urlHandle = App.addListener('appUrlOpen', (data) => {
-      logDebug('[Login] appUrlOpen:', data.url);
-      handleUrl(data.url);
-    });
-
-    // Check launch URL on mount (for cold start)
-    App.getLaunchUrl().then(({ url }) => {
-      if (url) {
-        logDebug('[Login] Launch URL:', url);
-        handleUrl(url);
-      }
-    }).catch(() => {});
-
-    return () => {
-      urlHandle.then(h => h.remove());
-    };
-  }, []);
+  // REMOVED: Duplicate appStateChange and appUrlOpen listeners
+  // OAuth handling is now consolidated in setupOAuthListener() from auth.ts
+  // Having multiple handlers caused race conditions where both tried to exchange
+  // the same single-use OAuth code, causing one to fail
 
   useEffect(() => {
     onLoginSuccessRef.current = onLoginSuccess;
@@ -289,6 +158,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       (user) => {
         logDebug('[Login] OAuth success callback received, user:', user.id);
         oauthInProgress.current = false;
+        oauthHandled.current = true; // Mark as handled to prevent timeout from firing
         const profile: UserProfile = {
           id: user.id,
           name: user.name,
@@ -323,6 +193,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       (err) => {
         logDebug('[Login] OAuth error callback:', err);
         oauthInProgress.current = false;
+        oauthHandled.current = true; // Mark as handled to prevent timeout from firing
         setLoading(false);
         setError(err);
       }
@@ -347,6 +218,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setLoading(true);
     setError(null);
     oauthInProgress.current = true;
+    oauthHandled.current = false;
 
     // Reset the OAuth callback flag before starting a new OAuth flow
     resetOAuthCallback();
@@ -358,8 +230,30 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       setLoading(false);
       oauthInProgress.current = false;
       setError(result.error || 'Failed to sign in');
+      return;
     }
-    // If success, the OAuth callback or app resume listener will handle resetting
+
+    // Set a timeout to reset loading state if OAuth doesn't complete
+    // This handles cases where:
+    // 1. User cancels OAuth in browser
+    // 2. Deep link doesn't fire on Android
+    // 3. Session polling fails
+    const oauthTimeout = setTimeout(() => {
+      if (oauthInProgress.current && !oauthHandled.current) {
+        logDebug('[Login] OAuth timeout - resetting loading state');
+        setLoading(false);
+        oauthInProgress.current = false;
+        // Don't show an error - user may have intentionally cancelled
+      }
+    }, 15000); // 15 seconds should be enough for OAuth + session polling
+
+    // Store timeout so it can be cleared on success
+    const originalOnSuccess = onLoginSuccessRef.current;
+    onLoginSuccessRef.current = (profile) => {
+      clearTimeout(oauthTimeout);
+      oauthHandled.current = true;
+      originalOnSuccess(profile);
+    };
   };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {

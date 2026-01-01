@@ -31,7 +31,7 @@ const WalkthroughTutorial: React.FC<WalkthroughTutorialProps> = ({ onComplete })
         <div className="space-y-4">
           <div className="text-center">
             <span className="text-6xl">🐱</span>
-            <div className="text-3xl font-black text-acid-green mt-2">100 BINGOS</div>
+            <div className="text-3xl font-black text-acid-green mt-2">1,000 BINGOS</div>
             <p className="text-gray-400 text-sm">Your starting stash</p>
           </div>
           <p>Bingo is the currency here. You'll use it to bet against friends.</p>
@@ -84,24 +84,24 @@ const WalkthroughTutorial: React.FC<WalkthroughTutorialProps> = ({ onComplete })
           <p>When adding, choose the <span className="font-bold">intensity level</span>:</p>
           <div className="space-y-3 mt-4">
             <div className="flex items-center gap-3 bg-black/50 p-3 rounded">
-              <span className="text-2xl">❄️</span>
+              <i className="fas fa-snowflake text-2xl text-cyan-400"></i>
               <div>
-                <span className="text-blue-400 font-bold">DECLAWED</span>
-                <span className="text-xs text-gray-400 ml-2">Safe bets</span>
+                <span className="text-cyan-400 font-bold">CHILL</span>
+                <span className="text-xs text-gray-400 ml-2">Safe bets only</span>
               </div>
             </div>
             <div className="flex items-center gap-3 bg-black/50 p-3 rounded">
-              <span className="text-2xl">🔥</span>
+              <i className="fas fa-fire-alt text-2xl text-orange-400"></i>
               <div>
-                <span className="text-orange-400 font-bold">FAIR GAME</span>
-                <span className="text-xs text-gray-400 ml-2">Embarrassing bets</span>
+                <span className="text-orange-400 font-bold">SPICY</span>
+                <span className="text-xs text-gray-400 ml-2">Embarrassing bets unlocked</span>
               </div>
             </div>
             <div className="flex items-center gap-3 bg-black/50 p-3 rounded">
-              <span className="text-2xl">☢️</span>
+              <i className="fas fa-radiation text-2xl text-alert-red"></i>
               <div>
-                <span className="text-alert-red font-bold">NO MERCY</span>
-                <span className="text-xs text-gray-400 ml-2">Maximum chaos</span>
+                <span className="text-alert-red font-bold">SAVAGE</span>
+                <span className="text-xs text-gray-400 ml-2">No limits. Maximum chaos.</span>
               </div>
             </div>
           </div>
@@ -126,7 +126,7 @@ const WalkthroughTutorial: React.FC<WalkthroughTutorialProps> = ({ onComplete })
             </div>
             <div className="flex items-center gap-3">
               <i className="fas fa-fire-alt text-alert-red"></i>
-              <span className="text-sm">View-once mode (Level 3 only)</span>
+              <span className="text-sm">View-once mode (SAVAGE only)</span>
             </div>
           </div>
           <p className="text-sm text-gray-400">No proof = no win. Simple as that.</p>

@@ -455,7 +455,7 @@ export const getTransactionHistory = async (
   return { transactions: data || [], error: error?.message || null };
 };
 
-// Borrow coins (creates debt)
+// Borrow bingos (creates debt)
 export const borrowCoins = async (
   borrowerId: string,
   amount: number

@@ -65,7 +65,10 @@ const mapDBUserToProfile = (dbUser: DBUser): UserProfile => ({
 });
 
 const resolvePostAuthView = (profile: UserProfile): AppView => {
-  if (!profile.riskProfile || profile.riskProfile === 'Unknown risk profile') {
+  // Check if onboarding was already completed (prevents re-routing on auth events)
+  const onboardingComplete = localStorage.getItem('bingo_onboarding_complete');
+
+  if (!onboardingComplete && (!profile.riskProfile || profile.riskProfile === 'Unknown risk profile')) {
     return AppView.ONBOARDING;
   }
 
@@ -135,6 +138,9 @@ const App: React.FC = () => {
     context: undefined,
   });
 
+  // Track if initial auth has been resolved to prevent re-routing on subsequent auth events
+  const initialAuthResolved = React.useRef(false);
+
   // 1. Auth state listener - runs once on mount
   useEffect(() => {
     let hasResolved = false;
@@ -146,17 +152,29 @@ const App: React.FC = () => {
         hasUser: !!dbUser,
         userId: dbUser?.id,
         riskProfile: dbUser?.risk_profile,
-        hasResolved
+        hasResolved,
+        initialAuthResolved: initialAuthResolved.current
       });
 
       hasResolved = true;
+
       if (dbUser) {
         setAuthUserId(dbUser.id);
         const profile = mapDBUserToProfile(dbUser);
         const nextView = resolvePostAuthView(profile);
-        logDebug('[App] Profile mapped, routing to:', nextView);
-        setView(nextView);
+
+        // Only route if this is the initial auth resolution OR if user just signed in
+        // Don't re-route if already authenticated (prevents unwanted navigation on token refresh)
+        if (!initialAuthResolved.current) {
+          logDebug('[App] Initial auth - routing to:', nextView);
+          setView(nextView);
+          initialAuthResolved.current = true;
+        } else {
+          logDebug('[App] Subsequent auth event - NOT re-routing (already at:', nextView, ')');
+        }
       } else {
+        // User signed out or no user - reset the flag and go to SPLASH
+        initialAuthResolved.current = false;
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
@@ -167,6 +185,7 @@ const App: React.FC = () => {
               logDebug('[App] Session hydrate routing ->', nextView);
               setAuthUserId(profile.id);
               setView(nextView);
+              initialAuthResolved.current = true;
             } else {
               logDebug('[App] Session found but profile unresolved, showing SPLASH', { error });
               setAuthUserId(null);
@@ -187,6 +206,7 @@ const App: React.FC = () => {
     });
 
     // Fallback timeout - if auth check takes too long, go to login
+    // Increased to 10s to handle slow network/database queries
     const timeout = setTimeout(() => {
       if (!hasResolved) {
         logDebug('[App] Auth check timeout - showing login screen');
@@ -194,7 +214,7 @@ const App: React.FC = () => {
         setView(AppView.SPLASH);
         setIsInitializing(false);
       }
-    }, 5000);
+    }, 10000);
 
     return () => {
       logDebug('[App] Cleaning up auth listener');
@@ -467,6 +487,9 @@ const App: React.FC = () => {
       relationship_status: profile.relationshipStatus || null,
       daily_routine: profile.dailyRoutine || null,
     });
+
+    // Mark onboarding as complete to prevent re-routing on future auth events
+    localStorage.setItem('bingo_onboarding_complete', 'true');
 
     const tutorialSeen = localStorage.getItem('bingo_tutorial_complete');
     if (!tutorialSeen) {
@@ -807,7 +830,7 @@ const App: React.FC = () => {
         status: 'active',
       });
 
-      // Add coins to user
+      // Add bingos to user
       await updateUser({ coins: user.coins + amount });
 
       // Refresh debts
@@ -856,7 +879,7 @@ const App: React.FC = () => {
         })
         .eq('id', debtId);
 
-      // Deduct coins
+      // Deduct bingos
       await updateUser({ coins: user.coins - amount });
 
       // Refresh debts
@@ -1170,6 +1193,7 @@ const App: React.FC = () => {
           onBack={() => setView(AppView.SWIPE_FEED)}
           onOpenRules={() => setView(AppView.RULES)}
           onOpenSettings={() => setView(AppView.SETTINGS)}
+          onProfileUpdate={(updates) => updateUser(updates)}
         />
       )}
 

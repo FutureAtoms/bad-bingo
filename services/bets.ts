@@ -164,7 +164,7 @@ export const swipeBet = async (
   }
 
   // Lock stake from user's wallet BEFORE recording swipe
-  // This deducts coins and creates a transaction record
+  // This deducts bingos and creates a transaction record
   const lockResult = await lockStakeForSwipe(userId, betId, stakeAmount);
 
   if (!lockResult.success) {

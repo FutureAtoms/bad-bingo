@@ -277,13 +277,13 @@ serve(async (req) => {
             .single();
 
           if (user && user.coins > 0) {
-            // Seize up to 50% of user's coins or remaining debt, whichever is less
+            // Seize up to 50% of user's bingos or remaining debt, whichever is less
             const newTotalOwed = totalOwed + dailyInterest;
             const maxSeizure = Math.floor(user.coins * 0.5);
             const seizureAmount = Math.min(maxSeizure, newTotalOwed);
 
             if (seizureAmount > 0) {
-              // Update user coins
+              // Update user bingos
               const newBalance = user.coins - seizureAmount;
               await supabase
                 .from('bb_users')

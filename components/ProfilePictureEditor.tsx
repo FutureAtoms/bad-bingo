@@ -84,27 +84,57 @@ const ProfilePictureEditor: React.FC<ProfilePictureEditorProps> = ({
       const response = await fetch(filteredImage);
       const blob = await response.blob();
 
-      // Generate unique filename
-      const filename = `avatars/${userId}/${Date.now()}.jpg`;
+      // Generate unique filename using user ID as folder
+      const timestamp = Date.now();
 
-      // Upload to Supabase Storage
-      const { data, error: uploadError } = await supabase.storage
-        .from('proofs')
-        .upload(filename, blob, {
+      // Try uploading to avatars bucket first, fall back to proofs bucket
+      let publicUrl: string;
+      let uploadSuccess = false;
+
+      // Try avatars bucket first
+      const avatarsFilename = `${userId}/${timestamp}.jpg`;
+      const { error: avatarsError } = await supabase.storage
+        .from('avatars')
+        .upload(avatarsFilename, blob, {
           contentType: 'image/jpeg',
           upsert: true,
         });
 
-      if (uploadError) {
-        throw uploadError;
+      if (!avatarsError) {
+        // Success! Get public URL from avatars bucket
+        const { data: urlData } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(avatarsFilename);
+        publicUrl = urlData.publicUrl;
+        uploadSuccess = true;
+      } else {
+        // Avatars bucket might not exist, fall back to proofs bucket
+        console.warn('Avatars bucket upload failed, trying proofs bucket:', avatarsError);
+
+        const proofsFilename = `avatars/${userId}/${timestamp}.jpg`;
+        const { error: proofsError } = await supabase.storage
+          .from('proofs')
+          .upload(proofsFilename, blob, {
+            contentType: 'image/jpeg',
+            upsert: true,
+          });
+
+        if (proofsError) {
+          console.error('Avatar upload failed to both buckets:', proofsError);
+          throw new Error(`Upload failed: ${proofsError.message}`);
+        }
+
+        // Get public URL from proofs bucket
+        const { data: urlData } = supabase.storage
+          .from('proofs')
+          .getPublicUrl(proofsFilename);
+        publicUrl = urlData.publicUrl;
+        uploadSuccess = true;
       }
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('proofs')
-        .getPublicUrl(filename);
-
-      const publicUrl = urlData.publicUrl;
+      if (!uploadSuccess) {
+        throw new Error('Failed to upload avatar to storage');
+      }
 
       // Call onSave with the new URL
       onSave(publicUrl, selectedFilter);

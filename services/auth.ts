@@ -103,7 +103,7 @@ export const signIn = async (data: SignInData): Promise<{ user: DBUser | null; e
   // If logged in within 24-48 hours, increment streak
   if (hoursSinceLastLogin >= 24 && hoursSinceLastLogin <= 48) {
     newLoginStreak += 1;
-    bonusCoins = Math.min(10 + (newLoginStreak * 5), 50); // 10-50 coins based on streak
+    bonusCoins = Math.min(10 + (newLoginStreak * 5), 50); // 10-50 bingos based on streak
   } else if (hoursSinceLastLogin > 48) {
     // Reset streak if more than 48 hours
     newLoginStreak = 1;
@@ -313,13 +313,29 @@ const getOrCreateUserProfile = async (
 
     // Try to get existing user
     logDebug('[Auth] About to query bb_users...');
-    const { data: existingUser, error: fetchError } = await supabase
+
+    // Add timeout to prevent hanging on slow queries
+    const queryPromise = supabase
       .from('bb_users')
       .select('*')
       .eq('id', userId)
       .single();
 
-    logDebug('[Auth] Existing user check:', { hasUser: !!existingUser, hasError: !!fetchError });
+    const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) => {
+      setTimeout(() => {
+        logDebug('[Auth] Database query timeout after 8 seconds');
+        resolve({ data: null, error: { message: 'Database query timeout' } });
+      }, 8000);
+    });
+
+    const { data: existingUser, error: fetchError } = await Promise.race([queryPromise, timeoutPromise]);
+
+    logDebug('[Auth] Existing user check:', { hasUser: !!existingUser, hasError: !!fetchError, errorMsg: fetchError?.message });
+
+  // If we got a timeout or network error (not "no rows found"), return error
+  if (fetchError && fetchError.message === 'Database query timeout') {
+    return { user: null, error: 'Unable to connect to database. Please check your internet connection.' };
+  }
 
   if (existingUser) {
     // Update login streak
@@ -446,17 +462,20 @@ export const setupOAuthListener = (
     return () => {};
   }
 
+  // Track if we're currently in an OAuth flow (set by resetOAuthCallback before starting)
+  let oauthFlowActive = false;
+
   // For native, listen for app URL events (deep link callback)
   const maybeHandleUrl = async (url?: string | null) => {
-    if (!url) return;
+    if (!url) return false;
     logDebug('[Auth] OAuth url check:', url);
     if (oauthCallbackHandled) {
       logDebug('[Auth] OAuth callback already handled, skipping');
-      return;
+      return true; // Return true to indicate it was already handled
     }
 
     if (!url.includes('auth/callback') && !url.includes('access_token') && !url.includes('code=')) {
-      return;
+      return false;
     }
 
     // Close the browser
@@ -471,22 +490,36 @@ export const setupOAuthListener = (
     if (result.user) {
       oauthCallbackHandled = true;
       onSuccess(result.user);
+      return true;
     } else if (result.error) {
-      onError(result.error);
+      // Don't call onError here if it's just a "code already used" error
+      // The other handler might have already processed it successfully
+      if (!result.error.includes('already used') && !result.error.includes('invalid')) {
+        onError(result.error);
+      }
+      return false;
     }
+    return false;
   };
 
   const urlHandle = App.addListener('appUrlOpen', async (data) => {
     logDebug('[Auth] appUrlOpen received:', data.url);
+    oauthFlowActive = true; // We got a deep link, OAuth is definitely active
     await maybeHandleUrl(data.url);
   });
 
   // Handle cold-start deep links that may bypass appUrlOpen
   App.getLaunchUrl()
-    .then(({ url }) => maybeHandleUrl(url))
+    .then(({ url }) => {
+      if (url && (url.includes('code=') || url.includes('access_token'))) {
+        oauthFlowActive = true;
+      }
+      maybeHandleUrl(url);
+    })
     .catch(() => {});
 
   // Also listen for app resume - check session when returning from browser
+  // This is CRITICAL for Android where deep links often don't work
   const resumeHandle = App.addListener('appStateChange', async (state) => {
     logDebug('[Auth] appStateChange:', { isActive: state.isActive, oauthCallbackHandled });
 
@@ -498,31 +531,39 @@ export const setupOAuthListener = (
         return;
       }
 
+      // First, try to get launch URL in case deep link came through
       try {
         const { url } = await App.getLaunchUrl();
-        await maybeHandleUrl(url);
-        if (oauthCallbackHandled) {
-          return;
+        if (url) {
+          const handled = await maybeHandleUrl(url);
+          if (handled || oauthCallbackHandled) {
+            return;
+          }
         }
       } catch {
         // Ignore launch URL failures; we'll still try session checks.
       }
 
-      // Try multiple times with increasing delays to catch the session
-      const checkSession = async (attempt: number) => {
+      // IMPORTANT: On Android, deep links often don't work due to Chrome Custom Tabs
+      // behavior. Poll for session more aggressively to catch OAuth completions.
+      const maxAttempts = 8; // More attempts, longer total wait
+      let attempts = 0;
+
+      const checkSession = async () => {
+        attempts++;
         if (oauthCallbackHandled) {
           logDebug('[Auth] OAuth handled during retry, stopping');
           return;
         }
 
         try {
-          logDebug('[Auth] Checking session, attempt', attempt);
+          logDebug('[Auth] Checking session, attempt', attempts);
           const { data: { session } } = await supabase.auth.getSession();
           logDebug('[Auth] Session on resume:', {
             hasSession: !!session,
             hasUser: !!session?.user,
             userId: session?.user?.id,
-            attempt
+            attempt: attempts
           });
 
           if (session?.user) {
@@ -536,23 +577,34 @@ export const setupOAuthListener = (
             if (user) {
               oauthCallbackHandled = true;
               onSuccess(user);
+              return;
             } else if (error) {
               onError(error);
+              return;
             }
-          } else if (attempt < 3) {
-            // Retry with longer delay
-            setTimeout(() => checkSession(attempt + 1), 1000);
+          }
+
+          // Continue polling with increasing delays
+          if (attempts < maxAttempts) {
+            const delay = attempts < 3 ? 300 : attempts < 5 ? 500 : 1000;
+            setTimeout(checkSession, delay);
+          } else {
+            // After all attempts, give up but DON'T call onError
+            // The user might have cancelled OAuth, or something else went wrong
+            // They can try again by tapping the button
+            logDebug('[Auth] No session found after', attempts, 'attempts. User may have cancelled OAuth.');
           }
         } catch (err) {
           logError('[Auth] Error checking session on resume:', err);
-          if (attempt < 3) {
-            setTimeout(() => checkSession(attempt + 1), 1000);
+          if (attempts < maxAttempts) {
+            const delay = attempts < 3 ? 300 : attempts < 5 ? 500 : 1000;
+            setTimeout(checkSession, delay);
           }
         }
       };
 
-      // Start checking after initial delay
-      setTimeout(() => checkSession(1), 500);
+      // Start checking quickly - Android needs fast polling
+      setTimeout(checkSession, 200);
     }
   });
 

@@ -158,34 +158,54 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       oauthHandled.current = true;
 
       try {
-        // Parse tokens from URL hash (Supabase uses hash fragment)
         const urlObj = new URL(url);
+
+        // PKCE flow returns code in query params
+        const code = urlObj.searchParams.get('code');
+
+        // Non-PKCE flow returns tokens in hash
         const hashParams = new URLSearchParams(urlObj.hash.substring(1));
         const accessToken = hashParams.get('access_token');
         const refreshToken = hashParams.get('refresh_token');
 
-        logDebug('[Login] Tokens found:', { hasAccess: !!accessToken, hasRefresh: !!refreshToken });
+        logDebug('[Login] Parsed URL:', { hasCode: !!code, hasAccess: !!accessToken });
 
-        if (accessToken) {
-          // Set session directly - this is the key!
+        let sessionData = null;
+
+        if (code) {
+          // PKCE flow - exchange code for session
+          logDebug('[Login] Exchanging code for session...');
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            logDebug('[Login] Code exchange error:', error.message);
+            throw new Error(error.message);
+          }
+          sessionData = data;
+        } else if (accessToken) {
+          // Direct token flow
+          logDebug('[Login] Setting session with tokens...');
           const { data, error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken || '',
           });
+          if (error) {
+            logDebug('[Login] setSession error:', error.message);
+            throw new Error(error.message);
+          }
+          sessionData = data;
+        }
 
-          logDebug('[Login] setSession result:', { hasSession: !!data.session, error: error?.message });
-
-          if (data.session) {
-            // Session is set, now get/create user profile
-            const result = await getOrCreateProfileFromSession();
-            if (result.user) {
-              const profile = dbUserToProfile(result.user);
-              oauthInProgress.current = false;
-              setLoading(false);
-              setCheckingAuth(false);
-              onLoginSuccessRef.current(profile);
-              return;
-            }
+        if (sessionData?.session) {
+          logDebug('[Login] Session established, getting profile...');
+          // Session is set, now get/create user profile
+          const result = await getOrCreateProfileFromSession();
+          if (result.user) {
+            const profile = dbUserToProfile(result.user);
+            oauthInProgress.current = false;
+            setLoading(false);
+            setCheckingAuth(false);
+            onLoginSuccessRef.current(profile);
+            return;
           }
         }
 

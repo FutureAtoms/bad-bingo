@@ -20,6 +20,16 @@ vi.mock('../services/economy', () => ({
   lockStakeForSwipe: vi.fn().mockResolvedValue({ success: true, newBalance: 80, error: null }),
 }));
 
+// Mock notificationBroadcast service
+vi.mock('../services/notificationBroadcast', () => ({
+  broadcastClashCreated: vi.fn().mockResolvedValue({
+    totalRecipients: 2,
+    notificationsSent: 2,
+    pushNotificationsSent: 0,
+    failures: [],
+  }),
+}));
+
 import { supabase } from '../services/supabase';
 import { generateBetsForFriend, swipeBet, getAvailableBets } from '../services/bets';
 import { lockStakeForSwipe } from '../services/economy';
@@ -74,7 +84,10 @@ describe('SwipeFeed Bet Service', () => {
         })) // Get all participants
         .mockReturnValueOnce(createSupabaseQuery({
           data: { id: 'clash-1' },
-        })); // Insert clash
+        })) // Insert clash
+        .mockReturnValueOnce(createSupabaseQuery({
+          data: { text: 'Test bet text' },
+        })); // Get bet text for notification
 
       const result = await swipeBet('bet-1', 'user-1', 'yes', 20);
 

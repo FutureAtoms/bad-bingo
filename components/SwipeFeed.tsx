@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { BetScenario, Friend, UserProfile, ActiveBet, AppView } from '../types';
 import { calculateStake } from '../services/economy';
 import { generateBetsForFriend, swipeBet, getBetById, SwipeMatchType } from '../services/bets';
+import { getPendingBetInvitations } from '../services/multiplayerBets';
 import { triggerMatchEffect, triggerSwipeEffect, playSound, triggerHaptic, createSparkParticles, Particle } from '../services/effects';
 import { supabase } from '../services/supabase';
 import type { DBClash } from '../types/database';
@@ -32,9 +33,57 @@ interface BetCard {
   backgroundType: string;
   stake: number;
   friend: Friend;
+  expiresAt?: string; // ISO string for countdown timer
+  isChallenge?: boolean; // True if this is a friend's challenge to you
   // Note: friendVote is intentionally NOT included here
   // The friend's vote comes from the database via swipeBet(), not simulated locally
 }
+
+// Countdown timer hook
+const useCountdown = (expiresAt: string | undefined) => {
+  const [timeLeft, setTimeLeft] = useState<string>('');
+  const [isUrgent, setIsUrgent] = useState(false);
+
+  useEffect(() => {
+    if (!expiresAt) {
+      setTimeLeft('');
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const expiry = new Date(expiresAt).getTime();
+      const diff = expiry - now;
+
+      if (diff <= 0) {
+        setTimeLeft('EXPIRED');
+        setIsUrgent(true);
+        return;
+      }
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      // Urgent if less than 30 minutes
+      setIsUrgent(diff < 30 * 60 * 1000);
+
+      if (hours > 0) {
+        setTimeLeft(`${hours}h ${minutes}m`);
+      } else if (minutes > 0) {
+        setTimeLeft(`${minutes}m ${seconds}s`);
+      } else {
+        setTimeLeft(`${seconds}s`);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [expiresAt]);
+
+  return { timeLeft, isUrgent };
+};
 
 const SwipeFeed: React.FC<SwipeFeedProps> = ({ user, friends, onNavigate, onBetCreated, unreadNotifications = 0, onReportBet }) => {
   const [cards, setCards] = useState<BetCard[]>([]);
@@ -59,6 +108,10 @@ const SwipeFeed: React.FC<SwipeFeedProps> = ({ user, friends, onNavigate, onBetC
   // Track clashes we've already handled locally to prevent duplicate notifications
   // This prevents showing a notification when we created the clash via our own swipe
   const processedClashesRef = useRef<Set<string>>(new Set());
+
+  // Get the current card for countdown timer
+  const currentCard = cards[currentIndex];
+  const { timeLeft, isUrgent } = useCountdown(currentCard?.expiresAt);
 
   // Particle animation loop
   useEffect(() => {
@@ -144,40 +197,88 @@ const SwipeFeed: React.FC<SwipeFeedProps> = ({ user, friends, onNavigate, onBetC
       setLoading(true);
       const allCards: BetCard[] = [];
 
-      // Generate bets for each friend using the database-backed service
-      for (const friend of activeFriends.slice(0, 3)) { // Limit to 3 friends for performance
-        try {
-          const { bets, error } = await generateBetsForFriend(
-            user.id,
-            friend.id,
-            friend.name,
-            friend.relationshipLevel as 1 | 2 | 3,
-            user.riskProfile,
-            user.coins
-          );
+      // STEP 1: First, fetch pending bet invitations (bets you were invited to but haven't swiped)
+      // This is the priority source of bets - these come from friends challenging you
+      try {
+        const { bets: pendingBets, error: pendingError } = await getPendingBetInvitations(user.id);
 
-          if (error) {
-            console.error(`Failed to generate bets for ${friend.name}:`, error);
-            continue;
+        if (!pendingError && pendingBets.length > 0) {
+          // Convert pending invitations to BetCard format
+          for (const bet of pendingBets) {
+            // Find the friend who created this bet
+            const creatorId = bet.creator_id;
+            const friend = activeFriends.find(f => f.id === creatorId);
+
+            if (friend) {
+              allCards.push({
+                id: bet.id,
+                dbBetId: bet.id,
+                text: bet.text,
+                category: bet.category || 'general',
+                backgroundType: bet.background_type || 'default',
+                stake: bet.base_stake,
+                friend,
+                expiresAt: bet.expires_at,
+                isChallenge: true,
+              });
+            } else {
+              // If creator is not in friends list, try to find any friend in target_users
+              const targetUsers = bet.target_users || [];
+              const anyFriend = activeFriends.find(f => targetUsers.includes(f.id) && f.id !== user.id);
+              if (anyFriend) {
+                allCards.push({
+                  id: bet.id,
+                  dbBetId: bet.id,
+                  text: bet.text,
+                  category: bet.category || 'general',
+                  backgroundType: bet.background_type || 'default',
+                  stake: bet.base_stake,
+                  friend: anyFriend,
+                  expiresAt: bet.expires_at,
+                  isChallenge: true,
+                });
+              }
+            }
           }
+        }
+      } catch (err) {
+        console.error('Failed to fetch pending bet invitations:', err);
+      }
 
-          // Map DB bets to BetCard format
-          // CRITICAL FIX (Task 1.2): Removed Math.random() friend vote simulation
-          // Friend's vote is determined via database when both users swipe
-          // The swipeBet() function checks if both participants have swiped
-          // and creates a clash only when they have opposite swipes
-          const friendCards: BetCard[] = bets.map(bet => ({
-            id: bet.id,
-            dbBetId: bet.id,
-            text: bet.text,
-            category: bet.category || 'general',
-            backgroundType: bet.background_type || 'default',
-            stake: bet.base_stake,
-            friend,
-          }));
-          allCards.push(...friendCards);
-        } catch (err) {
-          console.error(`Failed to generate bets for ${friend.name}:`, err);
+      // STEP 2: If no pending invitations, generate AI bets for each friend
+      // This ensures users always have something to swipe on
+      if (allCards.length === 0) {
+        for (const friend of activeFriends.slice(0, 3)) { // Limit to 3 friends for performance
+          try {
+            const { bets, error } = await generateBetsForFriend(
+              user.id,
+              friend.id,
+              friend.name,
+              friend.relationshipLevel as 1 | 2 | 3,
+              user.riskProfile,
+              user.coins
+            );
+
+            if (error) {
+              console.error(`Failed to generate bets for ${friend.name}:`, error);
+              continue;
+            }
+
+            // Map DB bets to BetCard format
+            // Friend's vote is determined via database when both users swipe
+            const friendCards: BetCard[] = bets.map(bet => ({
+              id: bet.id,
+              dbBetId: bet.id,
+              text: bet.text,
+              category: bet.category || 'general',
+              backgroundType: bet.background_type || 'default',
+              stake: bet.base_stake,
+              friend,
+            }));
+            allCards.push(...friendCards);
+          } catch (err) {
+            console.error(`Failed to generate bets for ${friend.name}:`, err);
+          }
         }
       }
 
@@ -498,7 +599,6 @@ const SwipeFeed: React.FC<SwipeFeedProps> = ({ user, friends, onNavigate, onBetC
     );
   }
 
-  const currentCard = cards[currentIndex];
   const rotateDeg = dragDelta * 0.1;
   const opacityNope = Math.min(Math.max(dragDelta * -0.01, 0), 1);
   const opacityLike = Math.min(Math.max(dragDelta * 0.01, 0), 1);
@@ -592,6 +692,24 @@ const SwipeFeed: React.FC<SwipeFeedProps> = ({ user, friends, onNavigate, onBetC
             >
               <i className="fas fa-flag text-xs"></i>
             </button>
+          )}
+
+          {/* Challenge Banner with Timer */}
+          {currentCard.isChallenge && timeLeft && (
+            <div className={`mb-3 p-2 rounded-lg flex items-center justify-between ${
+              isUrgent ? 'bg-alert-red/20 border border-alert-red animate-pulse' : 'bg-hot-pink/20 border border-hot-pink/50'
+            }`}>
+              <div className="flex items-center gap-2">
+                <i className={`fas fa-bolt ${isUrgent ? 'text-alert-red' : 'text-hot-pink'}`}></i>
+                <span className={`text-xs font-bold uppercase ${isUrgent ? 'text-alert-red' : 'text-hot-pink'}`}>
+                  {currentCard.friend.name} challenged you!
+                </span>
+              </div>
+              <div className={`flex items-center gap-1 ${isUrgent ? 'text-alert-red' : 'text-white'}`}>
+                <i className="fas fa-clock text-xs"></i>
+                <span className="text-sm font-bold">{timeLeft}</span>
+              </div>
+            </div>
           )}
 
           {/* Opponent Info */}

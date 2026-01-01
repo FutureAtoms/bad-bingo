@@ -931,29 +931,38 @@ const AddFriend: React.FC<AddFriendProps> = ({
   };
 
   return (
-    <div className="h-full bg-bingo-black flex flex-col p-6 relative overflow-hidden">
-      <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+    <div className="h-full bg-bingo-black flex flex-col relative overflow-hidden">
+      {/* Header with safe area padding for mobile */}
+      <div className="pt-[env(safe-area-inset-top)] bg-black/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="px-4 py-2 flex justify-between items-center">
+          <button
+            onClick={onClose}
+            className="w-12 h-12 flex items-center justify-center text-gray-400 hover:text-white active:text-acid-green transition-colors -ml-2 rounded-full active:bg-white/10"
+          >
+            <i className="fas fa-times text-2xl"></i>
+          </button>
+          <div className="text-[10px] font-mono text-gray-600 uppercase">
+            {stage === AddStage.MANAGE_HEAT ? 'Protocol: HEAT_MANAGEMENT' :
+             stage === AddStage.HEAT_PROPOSALS ? 'Protocol: HEAT_PROPOSALS' :
+             'Protocol: ADD_FRIEND'}
+          </div>
+          <div className="w-12"></div>
+        </div>
+      </div>
+
+      <div className="absolute top-16 right-0 p-8 opacity-10 pointer-events-none">
         <i className="fas fa-network-wired text-9xl text-hot-pink"></i>
       </div>
 
-      <div className="flex justify-between items-center z-10 mb-4">
-        <button onClick={onClose} className="text-gray-400 hover:text-white">
-          <i className="fas fa-times text-xl"></i>
-        </button>
-        <div className="text-[10px] font-mono text-gray-600 uppercase">
-          {stage === AddStage.MANAGE_HEAT ? 'Protocol: HEAT_MANAGEMENT' :
-           stage === AddStage.HEAT_PROPOSALS ? 'Protocol: HEAT_PROPOSALS' :
-           'Protocol: ADD_FRIEND'}
-        </div>
-        <div className="w-4"></div>
+      {/* Main content with padding */}
+      <div className="flex-1 overflow-y-auto p-6 pt-2">
+        {stage === AddStage.SEARCH && renderSearch()}
+        {stage === AddStage.SURVEY && renderSurvey()}
+        {stage === AddStage.ANALYZING && renderAnalyzing()}
+        {stage === AddStage.RESULT && renderResult()}
+        {stage === AddStage.HEAT_PROPOSALS && renderHeatProposals()}
+        {stage === AddStage.MANAGE_HEAT && renderManageHeat()}
       </div>
-
-      {stage === AddStage.SEARCH && renderSearch()}
-      {stage === AddStage.SURVEY && renderSurvey()}
-      {stage === AddStage.ANALYZING && renderAnalyzing()}
-      {stage === AddStage.RESULT && renderResult()}
-      {stage === AddStage.HEAT_PROPOSALS && renderHeatProposals()}
-      {stage === AddStage.MANAGE_HEAT && renderManageHeat()}
     </div>
   );
 };

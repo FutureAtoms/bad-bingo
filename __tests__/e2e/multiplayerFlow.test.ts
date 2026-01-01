@@ -52,6 +52,27 @@ vi.mock('../../services/pushTokenService', () => ({
   getUserPushTokens: vi.fn().mockResolvedValue({ tokens: ['token-1'], error: null }),
 }));
 
+vi.mock('../../services/notificationBroadcast', () => ({
+  broadcastClashCreated: vi.fn().mockResolvedValue({
+    totalRecipients: 2,
+    notificationsSent: 2,
+    pushNotificationsSent: 0,
+    failures: [],
+  }),
+  broadcastBetCreated: vi.fn().mockResolvedValue({
+    totalRecipients: 1,
+    notificationsSent: 1,
+    pushNotificationsSent: 0,
+    failures: [],
+  }),
+  broadcastClashResult: vi.fn().mockResolvedValue({
+    totalRecipients: 2,
+    notificationsSent: 2,
+    pushNotificationsSent: 0,
+    failures: [],
+  }),
+}));
+
 const fromMock = supabase.from as unknown as Mock;
 
 describe('E2E: Complete Bet Lifecycle', () => {
@@ -134,11 +155,18 @@ describe('E2E: Complete Bet Lifecycle', () => {
         error: null,
       });
 
+      // Mock for getting bet text (for notification)
+      const betTextQuery = createSupabaseQuery({
+        data: { text: 'Alice will eat sushi for lunch' },
+        error: null,
+      });
+
       fromMock
         .mockReturnValueOnce(existingParticipant)
         .mockReturnValueOnce(upsertParticipant)
         .mockReturnValueOnce(bothParticipants)
-        .mockReturnValueOnce(clashInsert);
+        .mockReturnValueOnce(clashInsert)
+        .mockReturnValueOnce(betTextQuery);
 
       const swipeResult = await swipeBet('bet-lifecycle', 'bob', 'no', 20);
 

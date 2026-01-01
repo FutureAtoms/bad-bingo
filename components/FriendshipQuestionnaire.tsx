@@ -99,36 +99,36 @@ const FriendshipQuestionnaire: React.FC<FriendshipQuestionnaireProps> = ({
 
   return (
     <div className="fixed inset-0 bg-gray-900 z-50 flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-800 bg-black">
-        <div className="flex items-center justify-between mb-2">
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-white transition-colors p-2"
-            aria-label="Close questionnaire"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-          <div className="flex items-center gap-2">
-            <img
-              src={friend.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.username}`}
-              alt={friend.name}
-              className="w-8 h-8 rounded-full border-2 border-green-400"
+      {/* Header with safe area padding */}
+      <div className="pt-[env(safe-area-inset-top)] border-b border-gray-800 bg-black">
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-2">
+            <button
+              onClick={onClose}
+              className="w-12 h-12 flex items-center justify-center text-gray-400 hover:text-white active:text-acid-green transition-colors -ml-2 rounded-full active:bg-white/10"
+              aria-label="Close questionnaire"
+            >
+              <i className="fas fa-times text-2xl"></i>
+            </button>
+            <div className="flex items-center gap-2">
+              <img
+                src={friend.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.username}`}
+                alt={friend.name}
+                className="w-8 h-8 rounded-full border-2 border-green-400"
+              />
+              <span className="text-white font-bold">{friend.name}</span>
+            </div>
+            <div className="text-green-400 text-xs font-mono bg-gray-800 px-2 py-1 rounded">
+              {currentQuestion + 1}/{FRIENDSHIP_QUESTIONS.length}
+            </div>
+          </div>
+          {/* Progress bar */}
+          <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-green-400 transition-all duration-500 ease-out"
+              style={{ width: `${progress}%` }}
             />
-            <span className="text-white font-bold">{friend.name}</span>
           </div>
-          <div className="text-green-400 text-xs font-mono bg-gray-800 px-2 py-1 rounded">
-            {currentQuestion + 1}/{FRIENDSHIP_QUESTIONS.length}
-          </div>
-        </div>
-        {/* Progress bar */}
-        <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-green-400 transition-all duration-500 ease-out"
-            style={{ width: `${progress}%` }}
-          />
         </div>
       </div>
 

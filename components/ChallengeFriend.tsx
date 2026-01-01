@@ -7,7 +7,7 @@ import {
   createBetForAllFriends,
   MultiplayerBetConfig,
 } from '../services/multiplayerBets';
-import { moderateContent } from '../services/geminiService';
+// Content moderation disabled - all bets allowed
 
 interface ChallengeFriendProps {
   user: UserProfile;
@@ -47,7 +47,6 @@ const ChallengeFriend: React.FC<ChallengeFriendProps> = ({ user, friend, friends
   const [myVote, setMyVote] = useState<boolean | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isModeratingContent, setIsModeratingContent] = useState(false);
 
   const activeFriends = friends.filter(f => f.friendshipStatus === 'accepted');
   const minStake = Math.max(2, Math.floor(user.coins / 50));
@@ -93,29 +92,9 @@ const ChallengeFriend: React.FC<ChallengeFriendProps> = ({ user, friend, friends
   const handleBetSubmit = async () => {
     if (!betText.trim() || betText.length < 10) return;
 
-    setIsModeratingContent(true);
-    setError(null);
-
-    try {
-      // Check content moderation before proceeding
-      const moderationResult = await moderateContent(betText);
-
-      if (!moderationResult.allowed) {
-        setError(moderationResult.reason || 'This bet content is not allowed. Please try something else.');
-        setIsModeratingContent(false);
-        return;
-      }
-
-      triggerHaptic('medium');
-      setStep('set_stake');
-    } catch (err) {
-      // On moderation error, allow user to proceed (don't block on API failures)
-      console.error('Moderation check failed:', err);
-      triggerHaptic('medium');
-      setStep('set_stake');
-    } finally {
-      setIsModeratingContent(false);
-    }
+    // Content moderation disabled - all bets allowed
+    triggerHaptic('medium');
+    setStep('set_stake');
   };
 
   const handleStakeConfirm = () => {
@@ -481,20 +460,14 @@ const ChallengeFriend: React.FC<ChallengeFriendProps> = ({ user, friend, friends
 
             <button
               onClick={handleBetSubmit}
-              disabled={betText.length < 10 || isModeratingContent}
+              disabled={betText.length < 10}
               className={`w-full py-4 rounded-lg font-bold uppercase tracking-widest ${
-                betText.length >= 10 && !isModeratingContent
+                betText.length >= 10
                   ? 'bg-hot-pink text-white'
                   : 'bg-gray-800 text-gray-600'
               }`}
             >
-              {isModeratingContent ? (
-                <span className="flex items-center justify-center gap-2">
-                  <i className="fas fa-spinner fa-spin"></i> Checking content...
-                </span>
-              ) : (
-                'Next: Set Stakes'
-              )}
+              Next: Set Stakes
             </button>
           </div>
         )}

@@ -38,6 +38,22 @@ vi.mock('../services/economy', () => ({
   awardClashWin: vi.fn().mockResolvedValue({ success: true, error: null }),
 }));
 
+// Mock notificationBroadcast service
+vi.mock('../services/notificationBroadcast', () => ({
+  broadcastClashCreated: vi.fn().mockResolvedValue({
+    totalRecipients: 2,
+    notificationsSent: 2,
+    pushNotificationsSent: 0,
+    failures: [],
+  }),
+  broadcastBetCreated: vi.fn().mockResolvedValue({
+    totalRecipients: 1,
+    notificationsSent: 1,
+    pushNotificationsSent: 0,
+    failures: [],
+  }),
+}));
+
 const fromMock = supabase.from as unknown as Mock;
 
 describe('Multiplayer Sync - Concurrent Swipe Scenarios', () => {
@@ -86,12 +102,15 @@ describe('Multiplayer Sync - Concurrent Swipe Scenarios', () => {
         error: null,
       });
       const clashInsert = createSupabaseQuery({ data: { id: 'clash-race-1' }, error: null });
+      // Mock for getting bet text (for notification)
+      const betTextQuery = createSupabaseQuery({ data: { text: 'Test bet text' }, error: null });
 
       fromMock
         .mockReturnValueOnce(existingParticipant2)
         .mockReturnValueOnce(upsert2)
         .mockReturnValueOnce(participants2)
-        .mockReturnValueOnce(clashInsert);
+        .mockReturnValueOnce(clashInsert)
+        .mockReturnValueOnce(betTextQuery);
 
       const result2 = await swipeBet('bet-race-1', 'user-2', 'no', 10);
 

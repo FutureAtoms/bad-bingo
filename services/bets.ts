@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type { DBBet, DBBetParticipant } from '../types/database';
 import { generateDailyBets } from './geminiService';
 import { calculateStake, lockStakeForSwipe } from './economy';
+import { broadcastClashCreated } from './notificationBroadcast';
 
 // Get available bets for user (not yet swiped, not expired)
 export const getAvailableBets = async (userId: string): Promise<{
@@ -234,6 +235,26 @@ export const swipeBet = async (
 
     if (clashError) {
       return { success: true, clashCreated: false, matchType: 'pending', error: clashError.message };
+    }
+
+    // Get bet text for notification
+    const { data: bet } = await supabase
+      .from('bb_bets')
+      .select('text')
+      .eq('id', betId)
+      .single();
+
+    // Send notifications to both participants about the clash
+    // This notifies both the prover and challenger that a clash has been created
+    if (clash) {
+      const challengerId = proverId === userId ? otherParticipant.user_id : userId;
+      await broadcastClashCreated(
+        clash.id,
+        bet?.text || 'Unknown bet',
+        totalPot,
+        proverId,
+        challengerId
+      );
     }
 
     return { success: true, clashCreated: true, matchType: 'clash', clashId: clash?.id, error: null };

@@ -4,6 +4,8 @@ import { UserProfile, ChatMessage } from '../types';
 
 interface OnboardingProps {
   onComplete: (profile: UserProfile) => void;
+  mode?: 'initial' | 'retake';
+  existingProfile?: UserProfile;
 }
 
 // Extended questions for comprehensive profile building
@@ -58,7 +60,8 @@ const QUESTION_FIELDS = [
   'city',           // 12 - NEW
 ];
 
-const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
+const Onboarding: React.FC<OnboardingProps> = ({ onComplete, mode = 'initial', existingProfile }) => {
+  const isRetake = mode === 'retake';
   const [step, setStep] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -72,11 +75,15 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   useEffect(() => {
     if (step === 0 && messages.length === 0) {
       setTimeout(() => {
-        addMessage('ai', "Oh look, another stray wandered into my casino.\nI'm Bad Bingo. I run this place. And you... you look like you make poor life choices.\n\nLet's find out exactly how poor.");
+        if (isRetake) {
+          addMessage('ai', "Back for more judgment, are we?\n*stretches and yawns*\n\nFine. Let's see if your life has improved since last time.\nSpoiler: it probably hasn't.");
+        } else {
+          addMessage('ai', "Oh look, another stray wandered into my casino.\nI'm Bad Bingo. I run this place. And you... you look like you make poor life choices.\n\nLet's find out exactly how poor.");
+        }
         setTimeout(() => addMessage('ai', QUESTIONS[0]), 1500);
       }, 500);
     }
-  }, [step, messages.length]);
+  }, [step, messages.length, isRetake]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -217,7 +224,31 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         schools = [schoolAnswer];
       }
 
-      const newProfile: UserProfile = {
+      // In retake mode, preserve existing profile data (coins, stats, etc.)
+      // Only update profile-related fields (riskProfile, bio, name, etc.)
+      const newProfile: UserProfile = isRetake && existingProfile ? {
+        ...existingProfile, // Preserve all existing data
+        // Update identity fields
+        name: newAnswers[0],
+        username: newAnswers[0].toLowerCase().replace(/[^a-z0-9]/g, ''),
+        age: parseInt(newAnswers[1].split(' ')[0]) || existingProfile.age || 18,
+        gender: newAnswers[1],
+        riskProfile: profileDesc,
+        bio: profileDesc, // Update the risk profile/bio
+        // Extended profile data
+        work,
+        schools,
+        hasPets: petsAndSiblings.hasPets,
+        petType: petsAndSiblings.petType,
+        siblingCount: petsAndSiblings.siblingCount,
+        city,
+        // Store raw answers for additional context
+        vices: [newAnswers[3]],
+        triggers: [newAnswers[6]],
+        commonLies: [newAnswers[8]],
+        relationshipStatus: newAnswers[5],
+        dailyRoutine: newAnswers[7],
+      } : {
         id: 'user-1',
         name: newAnswers[0],
         username: newAnswers[0].toLowerCase().replace(/[^a-z0-9]/g, ''),
@@ -262,7 +293,12 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       // Store the profile and analysis, then wait for user to continue
       setGeneratedProfile(newProfile);
       setAnalysisText(profileDesc);
-      addMessage('ai', `I've seen enough.\n\n**YOUR ANALYSIS:**\n\n${profileDesc}\n\nHere's 1000 bingos to start. Most strays lose it within a day.\nProve me wrong. Or don't. I get paid either way.`);
+
+      if (isRetake) {
+        addMessage('ai', `I've updated my notes on you.\n\n**YOUR NEW ANALYSIS:**\n\n${profileDesc}\n\n*files away your profile*\n\nThere. Your personality has been recalibrated.\nNow get back to losing bets.`);
+      } else {
+        addMessage('ai', `I've seen enough.\n\n**YOUR ANALYSIS:**\n\n${profileDesc}\n\nHere's 1000 bingos to start. Most strays lose it within a day.\nProve me wrong. Or don't. I get paid either way.`);
+      }
       setLoading(false);
       setWaitingForContinue(true);
     }
@@ -299,7 +335,9 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       <div className="flex-1 overflow-y-auto mb-4 space-y-4">
         <div className="text-center mb-8 opacity-50">
           <i className="fas fa-cat text-4xl text-acid-green animate-pulse"></i>
-          <h1 className="text-xl font-bold tracking-widest mt-2 uppercase text-acid-green">The Interrogation</h1>
+          <h1 className="text-xl font-bold tracking-widest mt-2 uppercase text-acid-green">
+            {isRetake ? 'The Re-Interrogation' : 'The Interrogation'}
+          </h1>
         </div>
 
         {messages.map((msg, idx) => (
@@ -325,23 +363,29 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
             <div className="bg-gray-900 border-2 border-acid-green/50 rounded-xl p-4 mb-4 shadow-[0_0_20px_rgba(204,255,0,0.1)]">
               <div className="flex items-center gap-2 mb-3">
                 <i className="fas fa-cat text-acid-green"></i>
-                <span className="text-acid-green font-mono text-xs uppercase tracking-widest">Your Profile Analysis</span>
+                <span className="text-acid-green font-mono text-xs uppercase tracking-widest">
+                  {isRetake ? 'Updated Profile Analysis' : 'Your Profile Analysis'}
+                </span>
               </div>
               <p className="text-white text-sm leading-relaxed italic">"{analysisText}"</p>
-              <div className="mt-3 pt-3 border-t border-gray-700 flex items-center justify-between">
-                <span className="text-gray-500 text-xs">Starting Balance</span>
-                <span className="text-acid-green font-bold">1000 Bingos</span>
-              </div>
+              {!isRetake && (
+                <div className="mt-3 pt-3 border-t border-gray-700 flex items-center justify-between">
+                  <span className="text-gray-500 text-xs">Starting Balance</span>
+                  <span className="text-acid-green font-bold">1000 Bingos</span>
+                </div>
+              )}
             </div>
           )}
           <button
             onClick={handleContinue}
             className="w-full py-4 bg-acid-green text-black font-bold rounded-lg uppercase tracking-widest hover:bg-white transition-colors flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(204,255,0,0.3)]"
           >
-            <span>Enter the Alley</span>
-            <i className="fas fa-door-open"></i>
+            <span>{isRetake ? 'Back to Profile' : 'Enter the Alley'}</span>
+            <i className={`fas ${isRetake ? 'fa-arrow-right' : 'fa-door-open'}`}></i>
           </button>
-          <p className="text-center text-gray-500 text-xs mt-2 italic">This analysis will be saved to your profile</p>
+          <p className="text-center text-gray-500 text-xs mt-2 italic">
+            {isRetake ? 'Your updated analysis will be saved' : 'This analysis will be saved to your profile'}
+          </p>
         </div>
       )}
 

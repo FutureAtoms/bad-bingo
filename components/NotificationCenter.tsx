@@ -93,8 +93,13 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
     const type = notification.type || notification.referenceType;
 
     switch (type) {
-      case 'clash':
       case 'challenge':
+        // Challenge notifications (new bet challenges) → go to SwipeFeed to respond
+        onNavigate(AppView.SWIPE_FEED);
+        onClose();
+        break;
+      case 'clash':
+        // Clash notifications (opposing swipes detected) → go to Dashboard to see active clashes
         onNavigate(AppView.DASHBOARD);
         onClose();
         break;
@@ -119,8 +124,23 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         onNavigate(AppView.PROFILE);
         onClose();
         break;
+      case 'win':
+      case 'loss':
+        // Win/loss notifications → go to Dashboard to see clash history
+        onNavigate(AppView.DASHBOARD);
+        onClose();
+        break;
+      case 'system':
+        // System notifications - check if it's about new bets available
+        if (notification.message?.toLowerCase().includes('bet') ||
+            notification.title?.toLowerCase().includes('bet')) {
+          onNavigate(AppView.SWIPE_FEED);
+          onClose();
+        }
+        // Otherwise stay on notification center
+        break;
       default:
-        // For system notifications or unknown types, stay on notification center
+        // For unknown types, stay on notification center
         break;
     }
   };

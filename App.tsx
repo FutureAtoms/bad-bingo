@@ -123,6 +123,9 @@ const App: React.FC = () => {
   // Borrow state
   const [activeDebts, setActiveDebts] = useState<Debt[]>([]);
 
+  // Interrogation retake mode state
+  const [isRetakeMode, setIsRetakeMode] = useState(false);
+
   // Report modal state (centralized for all views)
   const [reportModalState, setReportModalState] = useState<{
     isOpen: boolean;
@@ -272,7 +275,8 @@ const App: React.FC = () => {
       onNotificationTapped: (notification) => {
         // Handle deep linking from push notifications
         // Map notification types to appropriate screens:
-        // - clash/challenge -> DASHBOARD (view active clashes)
+        // - challenge -> SWIPE_FEED (respond to bet challenge)
+        // - clash/win/loss -> DASHBOARD (view active clashes and results)
         // - steal/robbery -> DEFENSE (defend against steals)
         // - proof -> PROOF_VAULT (view submitted proofs)
         // - debt -> BORROW (manage debts)
@@ -281,7 +285,13 @@ const App: React.FC = () => {
         const type = notification.data?.type as string;
         switch (type) {
           case 'challenge':
+            // New bet challenges → go to SwipeFeed to respond
+            setView(AppView.SWIPE_FEED);
+            break;
           case 'clash':
+          case 'win':
+          case 'loss':
+            // Clash-related notifications → go to Dashboard
             setView(AppView.DASHBOARD);
             break;
           case 'steal':
@@ -289,6 +299,8 @@ const App: React.FC = () => {
             setView(AppView.DEFENSE);
             break;
           case 'proof':
+          case 'proof_received':
+          case 'proof_needed':
             setView(AppView.PROOF_VAULT);
             break;
           case 'debt':
@@ -300,9 +312,17 @@ const App: React.FC = () => {
           case 'badge':
             setView(AppView.PROFILE);
             break;
+          case 'system':
+            // For system notifications about bets, go to swipe feed
+            if (notification.body?.toLowerCase().includes('bet')) {
+              setView(AppView.SWIPE_FEED);
+            } else {
+              setView(AppView.NOTIFICATIONS);
+            }
+            break;
           default:
-            // For unknown types, go to dashboard as default
-            setView(AppView.DASHBOARD);
+            // For unknown types, go to notifications to see what it is
+            setView(AppView.NOTIFICATIONS);
             break;
         }
       }
@@ -488,6 +508,13 @@ const App: React.FC = () => {
       daily_routine: profile.dailyRoutine || null,
     });
 
+    // Handle retake mode - go back to profile instead of tutorial
+    if (isRetakeMode) {
+      setIsRetakeMode(false);
+      setView(AppView.PROFILE);
+      return;
+    }
+
     // Mark onboarding as complete to prevent re-routing on future auth events
     localStorage.setItem('bingo_onboarding_complete', 'true');
 
@@ -497,6 +524,12 @@ const App: React.FC = () => {
     } else {
       setView(AppView.SWIPE_FEED);
     }
+  };
+
+  // Handle retake interrogation from profile
+  const handleRetakeInterrogation = () => {
+    setIsRetakeMode(true);
+    setView(AppView.ONBOARDING);
   };
 
   const handleTutorialComplete = () => {
@@ -1015,7 +1048,11 @@ const App: React.FC = () => {
       )}
 
       {view === AppView.ONBOARDING && (
-        <Onboarding onComplete={handleOnboardingComplete} />
+        <Onboarding
+          onComplete={handleOnboardingComplete}
+          mode={isRetakeMode ? 'retake' : 'initial'}
+          existingProfile={isRetakeMode && user ? user : undefined}
+        />
       )}
 
       {view === AppView.SWIPE_FEED && user && (
@@ -1194,6 +1231,7 @@ const App: React.FC = () => {
           onOpenRules={() => setView(AppView.RULES)}
           onOpenSettings={() => setView(AppView.SETTINGS)}
           onProfileUpdate={(updates) => updateUser(updates)}
+          onRetakeInterrogation={handleRetakeInterrogation}
         />
       )}
 

@@ -14,6 +14,7 @@ interface ProfileProps {
   onOpenRules?: () => void;
   onOpenSettings?: () => void;
   onProfileUpdate?: (updates: Partial<UserProfile>) => void;
+  onRetakeInterrogation?: () => void;
 }
 
 interface EditableFields {
@@ -64,7 +65,7 @@ const BADGE_DISPLAY_INFO: Record<string, { icon: string; color: string }> = {
   'beggar': { icon: 'fa-hands-praying', color: 'text-cyan-glitch' },
 };
 
-const Profile: React.FC<ProfileProps> = ({ user, onBack, onOpenRules, onOpenSettings, onProfileUpdate }) => {
+const Profile: React.FC<ProfileProps> = ({ user, onBack, onOpenRules, onOpenSettings, onProfileUpdate, onRetakeInterrogation }) => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
   const [isEditing, setIsEditing] = useState(false);
@@ -415,25 +416,46 @@ const Profile: React.FC<ProfileProps> = ({ user, onBack, onOpenRules, onOpenSett
                     </div>
                 </div>
 
-                <div className="mt-6 pt-6 border-t border-dashed border-gray-700">
-                    <p className="text-gray-400 text-xs font-mono italic text-center">
-                        "{user.riskProfile}"
-                    </p>
-                </div>
+            </div>
 
-                {/* Bio Section */}
-                {user.bio && !isEditing && (
-                    <div className="mt-4 pt-4 border-t border-dashed border-gray-700">
-                        <div className="flex items-start gap-2">
-                            <i className="fas fa-quote-left text-acid-green/50 text-xs mt-1"></i>
-                            <p className="text-gray-300 text-sm leading-relaxed flex-1">
-                                {user.bio}
-                            </p>
-                            <i className="fas fa-quote-right text-acid-green/50 text-xs mt-1"></i>
+            {/* Risk Profile Analysis Card - Prominent Display */}
+            {user.riskProfile && !isEditing && (
+                <div className="bg-gray-900/80 border-2 border-acid-green/30 rounded-xl p-5 mb-6 relative overflow-hidden shadow-[0_0_20px_rgba(204,255,0,0.1)]">
+                    {/* Background decoration */}
+                    <div className="absolute top-0 right-0 opacity-5">
+                        <i className="fas fa-cat text-[120px] text-acid-green translate-x-8 -translate-y-4"></i>
+                    </div>
+
+                    {/* Header */}
+                    <div className="flex items-center gap-2 mb-4 relative z-10">
+                        <div className="w-8 h-8 rounded-full bg-acid-green/20 flex items-center justify-center">
+                            <i className="fas fa-brain text-acid-green"></i>
+                        </div>
+                        <div>
+                            <h3 className="text-acid-green font-mono text-xs uppercase tracking-widest">Bad Bingo's Analysis</h3>
+                            <p className="text-gray-600 text-[10px]">Your psychological profile</p>
                         </div>
                     </div>
-                )}
-            </div>
+
+                    {/* Risk Profile Content */}
+                    <div className="bg-black/40 rounded-lg p-4 mb-4 relative z-10">
+                        <p className="text-white text-sm leading-relaxed font-mono italic">
+                            "{user.riskProfile}"
+                        </p>
+                    </div>
+
+                    {/* Retake Button */}
+                    {onRetakeInterrogation && (
+                        <button
+                            onClick={onRetakeInterrogation}
+                            className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-acid-green/50 text-gray-300 hover:text-acid-green font-bold py-3 rounded-lg uppercase text-xs tracking-widest transition-all flex items-center justify-center gap-2 relative z-10"
+                        >
+                            <i className="fas fa-refresh"></i>
+                            <span>Retake the Interrogation</span>
+                        </button>
+                    )}
+                </div>
+            )}
 
             {/* Edit Form */}
             {isEditing && (

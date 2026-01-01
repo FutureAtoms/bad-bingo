@@ -390,13 +390,17 @@ const App: React.FC = () => {
   // This is CRITICAL: when another user creates a bet/notification for you,
   // the notification is inserted into bb_notifications. Your app needs to
   // listen for this and show a local notification in the Android tray.
+  //
+  // NOTE: useNotifications hook has its own subscription for updating React state.
+  // This subscription uses a DIFFERENT channel name to avoid conflicts.
   useEffect(() => {
     if (!authUserId) return;
 
-    logDebug('[App] Setting up notification subscription for user:', authUserId);
+    logDebug('[App] Setting up local notification subscription for user:', authUserId);
 
+    // Use unique channel name to avoid conflict with useNotifications hook
     const notificationSubscription = supabase
-      .channel(`notifications:${authUserId}`)
+      .channel(`local-push:${authUserId}`)
       .on(
         'postgres_changes',
         {
@@ -410,7 +414,8 @@ const App: React.FC = () => {
           logDebug('[App] New notification received via realtime:', notification);
 
           // Show local notification in Android system tray
-          await showLocalNotification(
+          // This is the KEY fix: shows notification on the RECIPIENT's device
+          const shown = await showLocalNotification(
             notification.title || 'Bad Bingo',
             notification.message || 'You have a new notification',
             {
@@ -420,31 +425,39 @@ const App: React.FC = () => {
               notificationId: notification.id,
             }
           );
+          logDebug('[App] Local notification shown:', shown);
 
           // Also show in-app toast
           const notifType = notification.type || 'system';
-          const validTypes: Array<'robbery' | 'clash' | 'proof' | 'system' | 'badge' | 'debt' | 'beg'> = ['robbery', 'clash', 'proof', 'system', 'badge', 'debt', 'beg'];
+          // Include 'challenge' type for bet challenges
+          const validTypes: Array<'robbery' | 'clash' | 'proof' | 'system' | 'badge' | 'debt' | 'beg' | 'challenge'> =
+            ['robbery', 'clash', 'proof', 'system', 'badge', 'debt', 'beg', 'challenge'];
+
+          // Map challenge to clash for toast display (they use the same icon)
+          const displayType = notifType === 'challenge' ? 'clash' : notifType;
+
           addToastNotification({
             id: notification.id || `notif-${Date.now()}`,
-            type: validTypes.includes(notifType as any) ? (notifType as 'robbery' | 'clash' | 'proof' | 'system' | 'badge' | 'debt' | 'beg') : 'system',
+            type: validTypes.includes(notifType as any)
+              ? (displayType as 'robbery' | 'clash' | 'proof' | 'system' | 'badge' | 'debt' | 'beg')
+              : 'system',
             title: notification.title || 'Notification',
             message: notification.message || '',
             priority: notification.priority || 'normal',
             read: false,
             timestamp: Date.now()
           });
-
-          // Refresh notifications list
-          refetchNotifications();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        logDebug('[App] Notification subscription status:', status);
+      });
 
     return () => {
       logDebug('[App] Cleaning up notification subscription');
       notificationSubscription.unsubscribe();
     };
-  }, [authUserId, refetchNotifications]);
+  }, [authUserId]);
 
   // Fetch debts for borrow screen
   useEffect(() => {

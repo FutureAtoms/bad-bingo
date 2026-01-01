@@ -128,30 +128,52 @@ export interface PushNotificationData {
 }
 
 // Show a local notification (shows in Android notification tray)
+// This is used to display notifications on the RECIPIENT's device when
+// they receive a notification via Supabase Realtime subscription.
 export const showLocalNotification = async (
   title: string,
   body: string,
   data?: Record<string, unknown>
 ): Promise<boolean> => {
+  logDebug('showLocalNotification called:', { title, body, isNative: isPushAvailable() });
+
   if (!isPushAvailable()) {
     // Fallback for web - use browser notification API
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, { body });
-      return true;
+    logDebug('Not on native platform, trying browser notification');
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') {
+        new Notification(title, { body });
+        return true;
+      } else if (Notification.permission !== 'denied') {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          new Notification(title, { body });
+          return true;
+        }
+      }
     }
     return false;
   }
 
   try {
-    // Check permission first
+    // Check and request permission if needed
     const permStatus = await LocalNotifications.checkPermissions();
+    logDebug('Local notification permission status:', permStatus.display);
+
     if (permStatus.display !== 'granted') {
-      await LocalNotifications.requestPermissions();
+      const reqResult = await LocalNotifications.requestPermissions();
+      logDebug('Permission request result:', reqResult.display);
+      if (reqResult.display !== 'granted') {
+        logWarn('Local notification permission denied');
+        return false;
+      }
     }
 
-    // Generate a unique ID
+    // Generate a unique ID (must be a 32-bit integer for Android)
     const notificationId = Math.floor(Math.random() * 2147483647);
 
+    // Schedule notification for immediate delivery
+    // Using a small delay (50ms) ensures the notification is processed
     await LocalNotifications.schedule({
       notifications: [
         {
@@ -159,18 +181,20 @@ export const showLocalNotification = async (
           title: title,
           body: body,
           channelId: 'bad_bingo_notifications',
-          smallIcon: 'ic_launcher',
+          smallIcon: 'ic_launcher', // Use app icon for status bar
           largeIcon: 'ic_launcher',
           extra: data,
           sound: 'default',
-          attachments: undefined,
-          actionTypeId: '',
-          schedule: { at: new Date(Date.now() + 100) }, // Schedule for immediate
+          // Schedule for near-immediate delivery
+          schedule: {
+            at: new Date(Date.now() + 50),
+            allowWhileIdle: true, // Important for Doze mode
+          },
         },
       ],
     });
 
-    logDebug('Local notification scheduled:', { title, body });
+    logDebug('Local notification scheduled successfully:', { id: notificationId, title });
     return true;
   } catch (error) {
     logError('Local notification error:', error);
